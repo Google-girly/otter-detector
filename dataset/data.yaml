@@ -1,0 +1,13 @@
+train: /Users/detorres/Desktop/projects/people-detector/dataset/train/images
+val: /Users/detorres/Desktop/projects/people-detector/dataset/valid/images
+test: /Users/detorres/Desktop/projects/people-detector/dataset/test/images
+
+nc: 1
+names: ['Southern Sea Otter']
+
+roboflow:
+  workspace: desiree-torres
+  project: sea-otters-dslyz-kperf
+  version: dataset
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/desiree-torres/sea-otters-dslyz-kperf/dataset/dataset

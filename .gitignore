@@ -1,0 +1,21 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store
+
+# Model weights (large binary files — download or train locally)
+*.pt
+
+# Training runs and outputs
+runs/
+
+# Dataset images (re-download from Roboflow)
+dataset/train/images/
+dataset/valid/images/
+dataset/test/images/
+dataset/train/labels.cache
+dataset/valid/labels.cache
+dataset/test/labels.cache
