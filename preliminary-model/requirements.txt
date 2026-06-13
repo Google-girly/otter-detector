@@ -1,3 +1,5 @@
 ultralytics==8.4.60
 opencv-python==4.13.0.92
 yt-dlp==2026.3.17
+supabase
+python-dotenv
