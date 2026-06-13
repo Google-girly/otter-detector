@@ -13,6 +13,7 @@ public-labeling/
 ├── db/
 │   ├── schema.sql      # CREATE TABLE statements — run once in Supabase SQL Editor
 │   └── populate.sql    # Backfill images table from Storage — run if upload_to_db.py returns 0
+├── labeling-ui/        # React frontend (Vite)
 ├── .env                # API keys (never commit this)
 ├── .env.example        # Template for .env
 └── .gitignore
