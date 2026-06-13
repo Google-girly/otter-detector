@@ -160,7 +160,10 @@ function EditModal({ images, startIndex, onClose, onSaved }) {
               onMouseDown={handleMouseDown}
               onMouseMove={handleMouseMove}
               onMouseUp={handleMouseUp}
-              style={{ cursor: "crosshair", borderRadius: 8, overflow: "hidden" }}
+              onTouchStart={handleMouseDown}
+              onTouchMove={handleMouseMove}
+              onTouchEnd={handleMouseUp}
+              style={{ cursor: "crosshair", borderRadius: 8, overflow: "hidden", touchAction: "none" }}
             >
               <Layer scaleX={scale} scaleY={scale}>
                 <KonvaImage image={konvaImage} />

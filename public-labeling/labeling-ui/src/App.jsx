@@ -127,6 +127,10 @@ export default function App() {
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
+          onTouchStart={handleMouseDown}
+          onTouchMove={handleMouseMove}
+          onTouchEnd={handleMouseUp}
+          style={{ touchAction: "none" }}
         >
           <Layer scaleX={scale} scaleY={scale}>
             <Image image={konvaImage} />
@@ -142,6 +146,10 @@ export default function App() {
                 fill={selectedBox === i ? "rgba(250, 204, 21, 0.15)" : "transparent"}
                 strokeWidth={2 / scale}
                 onClick={(e) => {
+                  e.cancelBubble = true;
+                  setSelectedBox(selectedBox === i ? null : i);
+                }}
+                onTap={(e) => {
                   e.cancelBubble = true;
                   setSelectedBox(selectedBox === i ? null : i);
                 }}
