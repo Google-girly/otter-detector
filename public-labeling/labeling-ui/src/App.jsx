@@ -170,9 +170,15 @@ export default function App() {
         </Stage>
       </div>
 
-      <p className="instructions">
-        Drag to draw a box · Click a box to select it · Delete/Backspace to remove selected
-      </p>
+      <div className="instructions">
+        <strong>How to label:</strong>
+        <ol className="instructions-list">
+          <li>Drag (or touch-drag on mobile) to draw a box around each otter in the image.</li>
+          <li>Tap or click a box to select it — it turns yellow. Press Delete/Backspace or use <em>Delete Selected</em> to remove it.</li>
+          <li>When all otters are boxed, click <em>Submit Labels</em>.</li>
+          <li>If there are no otters in the image, click <em>No Otters</em> instead.</li>
+        </ol>
+      </div>
 
       <div className="actions">
         <button className="btn-submit" onClick={handleSubmit} disabled={boxes.length === 0}>
