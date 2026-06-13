@@ -7,7 +7,6 @@ import os
 import random
 import secrets
 
-# fixing
 # Load the .env file so we can use SUPABASE_URL and SUPABASE_KEY
 load_dotenv()
 
