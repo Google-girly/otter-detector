@@ -13,9 +13,11 @@ export default function App() {
   const [boxes, setBoxes] = useState([]);          // Bounding boxes drawn so far
   const [drawing, setDrawing] = useState(false);   // Is the user currently drawing?
   const [currentBox, setCurrentBox] = useState(null); // The box being drawn right now
+  const [selectedBox, setSelectedBox] = useState(null); // Index of the selected box
   // Fetch the next unlabeled image from the backend
   const fetchNextImage = async () => {
     setBoxes([]);
+    setSelectedBox(null);
     const res = await axios.get(`${BACKEND}/next-image`);
     setImage(res.data);
 
@@ -29,6 +31,18 @@ export default function App() {
     fetchNextImage();
   }, []);
 
+  // Delete selected box with keyboard
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.key === "Delete" || e.key === "Backspace") && selectedBox !== null) {
+        setBoxes((prev) => prev.filter((_, i) => i !== selectedBox));
+        setSelectedBox(null);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [selectedBox]);
+
   // Scale pointer position back to original image coordinates
   const getPos = (e) => {
     const pos = e.target.getStage().getPointerPosition();
@@ -38,8 +52,10 @@ export default function App() {
     return { x: pos.x / sc, y: pos.y / sc };
   };
 
-  // When the user clicks down, start drawing a box
+  // When the user clicks down, start drawing a box (unless clicking an existing box)
   const handleMouseDown = (e) => {
+    if (e.target.getClassName() === "Rect") return;
+    setSelectedBox(null);
     const pos = getPos(e);
     setDrawing(true);
     setCurrentBox({ x: pos.x, y: pos.y, width: 0, height: 0, label: "otter" });
@@ -122,8 +138,13 @@ export default function App() {
                 y={box.y}
                 width={box.width}
                 height={box.height}
-                stroke="#ef4444"
+                stroke={selectedBox === i ? "#facc15" : "#ef4444"}
+                fill={selectedBox === i ? "rgba(250, 204, 21, 0.15)" : "transparent"}
                 strokeWidth={2 / scale}
+                onClick={(e) => {
+                  e.cancelBubble = true;
+                  setSelectedBox(selectedBox === i ? null : i);
+                }}
               />
             ))}
 
@@ -141,14 +162,23 @@ export default function App() {
         </Stage>
       </div>
 
-      <p className="instructions">Click and drag to draw a bounding box around each otter</p>
+      <p className="instructions">
+        Drag to draw a box · Click a box to select it · Delete/Backspace to remove selected
+      </p>
 
       <div className="actions">
         <button className="btn-submit" onClick={handleSubmit} disabled={boxes.length === 0}>
           Submit Labels
         </button>
-        <button className="btn-clear" onClick={() => setBoxes([])} disabled={boxes.length === 0}>
-          Clear Boxes
+        <button
+          className="btn-delete-selected"
+          onClick={() => { setBoxes((prev) => prev.filter((_, i) => i !== selectedBox)); setSelectedBox(null); }}
+          disabled={selectedBox === null}
+        >
+          Delete Selected
+        </button>
+        <button className="btn-clear" onClick={() => { setBoxes([]); setSelectedBox(null); }} disabled={boxes.length === 0}>
+          Clear All
         </button>
         <button className="btn-no-otters" onClick={handleNoOtters}>
           No Otters
