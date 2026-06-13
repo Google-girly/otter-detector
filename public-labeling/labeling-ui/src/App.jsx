@@ -4,7 +4,7 @@ import axios from "axios";
 import "./App.css";
 
 const SUPABASE_URL = "https://ofuqvgfdninllnlhtqij.supabase.co";
-const BACKEND = "http://127.0.0.1:8000";
+const BACKEND = "";
 const LABELS = ["otter", "not sure"];
 
 export default function App() {
@@ -18,7 +18,7 @@ export default function App() {
   const fetchNextImage = async () => {
     setBoxes([]);
     setSelectedBox(null);
-    const res = await axios.get(`${BACKEND}/next-image`);
+    const res = await axios.get(`${BACKEND}/api/next-image`);
     setImage(res.data);
 
     // Load the image from Supabase storage so Konva can display it
@@ -84,7 +84,7 @@ export default function App() {
 
   // Submit all boxes to the backend
   const handleSubmit = async () => {
-    await axios.post(`${BACKEND}/submit-label`, {
+    await axios.post(`${BACKEND}/api/submit-label`, {
       image_id: image.id,
       boxes: boxes,
       labeled_by: "",
@@ -94,7 +94,7 @@ export default function App() {
 
   // Submit with no boxes — marks image as labeled with empty annotation
   const handleNoOtters = async () => {
-    await axios.post(`${BACKEND}/submit-label`, {
+    await axios.post(`${BACKEND}/api/submit-label`, {
       image_id: image.id,
       boxes: [],
       labeled_by: "",

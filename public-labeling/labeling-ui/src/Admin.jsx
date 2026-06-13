@@ -3,7 +3,7 @@ import { Stage, Layer, Image as KonvaImage, Rect } from "react-konva";
 import axios from "axios";
 import "./Admin.css";
 
-const BACKEND = "http://127.0.0.1:8000";
+const BACKEND = "";
 const SUPABASE_URL = "https://ofuqvgfdninllnlhtqij.supabase.co";
 
 const TOKEN_KEY = "admin_token";
@@ -25,7 +25,7 @@ function LoginScreen({ onLogin }) {
     setLoading(true);
     setError("");
     try {
-      const res = await axios.post(`${BACKEND}/admin/login`, { password });
+      const res = await axios.post(`${BACKEND}/api/admin/login`, { password });
       sessionStorage.setItem(TOKEN_KEY, res.data.token);
       onLogin();
     } catch {
@@ -128,7 +128,7 @@ function EditModal({ images, startIndex, onClose, onSaved }) {
 
   const handleSave = async () => {
     setSaving(true);
-    await axios.put(`${BACKEND}/admin/images/${img.id}`, { boxes }, { headers: authHeaders() });
+    await axios.put(`${BACKEND}/api/admin/images/${img.id}`, { boxes }, { headers: authHeaders() });
     onSaved(img.id, boxes);
     setSaving(false);
   };
@@ -191,7 +191,7 @@ function EditModal({ images, startIndex, onClose, onSaved }) {
             <button className="btn-clear" onClick={() => setBoxes([])} disabled={boxes.length === 0}>
               Clear Boxes
             </button>
-            <button className="btn-no-otters" onClick={async () => { setBoxes([]); await axios.put(`${BACKEND}/admin/images/${img.id}`, { boxes: [] }, { headers: authHeaders() }); onSaved(img.id, []); }}>
+            <button className="btn-no-otters" onClick={async () => { setBoxes([]); await axios.put(`${BACKEND}/api/admin/images/${img.id}`, { boxes: [] }, { headers: authHeaders() }); onSaved(img.id, []); }}>
               No Otters
             </button>
             <button className="btn-submit" onClick={handleSave} disabled={saving}>
@@ -216,8 +216,8 @@ export default function Admin() {
 
   const fetchData = () => {
     const h = { headers: authHeaders() };
-    axios.get(`${BACKEND}/admin/stats`, h).then((r) => setStats(r.data));
-    axios.get(`${BACKEND}/admin/images`, h).then((r) => setImages(r.data));
+    axios.get(`${BACKEND}/api/admin/stats`, h).then((r) => setStats(r.data));
+    axios.get(`${BACKEND}/api/admin/images`, h).then((r) => setImages(r.data));
   };
 
   useEffect(() => { if (authed) fetchData(); }, [authed]);
@@ -248,7 +248,7 @@ export default function Admin() {
         }
       )
     );
-    axios.get(`${BACKEND}/admin/stats`, { headers: authHeaders() }).then((r) => setStats(r.data));
+    axios.get(`${BACKEND}/api/admin/stats`, { headers: authHeaders() }).then((r) => setStats(r.data));
   }, []);
 
   const handleLogout = () => {
