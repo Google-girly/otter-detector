@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, APIRouter, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from supabase import create_client
@@ -32,9 +32,12 @@ def require_admin(credentials: HTTPAuthorizationCredentials = Depends(_bearer)):
     if not password or not secrets.compare_digest(credentials.credentials, password):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-# This is an endpoint — when the frontend calls /next-image
+# All routes live under /api so they don't conflict with the frontend on Vercel
+router = APIRouter(prefix="/api")
+
+# This is an endpoint — when the frontend calls /api/next-image
 # it gets back the next image that hasn't been labeled yet
-@app.get("/next-image")
+@router.get("/next-image")
 def get_next_image():
     # Look in the images table for any row where is_labeled is False
     # Only grab 1 at a time
@@ -48,7 +51,7 @@ def get_next_image():
 
 # This endpoint receives the bounding boxes the user drew
 # and saves them to the database
-@app.post("/submit-label")
+@router.post("/submit-label")
 def submit_label(payload: dict):
     # Pull out the pieces of info the frontend sends us
     image_id = payload["image_id"]    # Which image was labeled
@@ -71,7 +74,7 @@ def submit_label(payload: dict):
     return {"message": "Label saved!"}
 
 
-@app.post("/admin/login")
+@router.post("/admin/login")
 def admin_login(payload: dict):
     password = os.getenv("ADMIN_PASSWORD", "")
     if not password or not secrets.compare_digest(payload.get("password", ""), password):
@@ -79,7 +82,7 @@ def admin_login(payload: dict):
     return {"token": password}
 
 
-@app.get("/admin/stats")
+@router.get("/admin/stats")
 def get_stats(_=Depends(require_admin)):
     total = supabase.table("images").select("id", count="exact").execute().count
     labeled = supabase.table("images").select("id", count="exact").eq("is_labeled", True).execute().count
@@ -91,7 +94,7 @@ def get_stats(_=Depends(require_admin)):
     }
 
 
-@app.put("/admin/images/{image_id}")
+@router.put("/admin/images/{image_id}")
 def update_label(image_id: str, payload: dict, _=Depends(require_admin)):
     boxes = payload["boxes"]
     supabase.table("labels").delete().eq("image_id", image_id).execute()
@@ -105,7 +108,10 @@ def update_label(image_id: str, payload: dict, _=Depends(require_admin)):
     return {"message": "Label updated!"}
 
 
-@app.get("/admin/images")
+@router.get("/admin/images")
 def get_images(_=Depends(require_admin)):
     response = supabase.table("images").select("id, filename, storage_path, is_labeled, created_at, labels(boxes)").order("created_at", desc=True).execute()
     return response.data
+
+
+app.include_router(router)
