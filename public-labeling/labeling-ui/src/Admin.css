@@ -1,0 +1,396 @@
+.admin {
+  min-height: 100svh;
+  background: #0f1117;
+  padding: 24px;
+  box-sizing: border-box;
+  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  color: #e2e8f0;
+}
+
+.admin-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 28px;
+}
+
+.admin-header h1 {
+  font-size: 20px;
+  font-weight: 600;
+  color: #f1f5f9;
+  margin: 0;
+}
+
+.back-link {
+  font-size: 13px;
+  color: #7c3aed;
+  text-decoration: none;
+}
+
+.back-link:hover {
+  color: #a78bfa;
+}
+
+/* Stats */
+
+.stats-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.stat-card {
+  flex: 1;
+  min-width: 120px;
+  background: #1e2330;
+  border: 1px solid #2e3448;
+  border-radius: 10px;
+  padding: 16px 20px;
+}
+
+.stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: #f1f5f9;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.stat-card.labeled .stat-value { color: #4ade80; }
+.stat-card.unlabeled .stat-value { color: #f87171; }
+.stat-card.percent .stat-value { color: #a78bfa; }
+
+/* Progress bar */
+
+.progress-bar-wrap {
+  height: 6px;
+  background: #1e2330;
+  border-radius: 99px;
+  overflow: hidden;
+  margin-bottom: 28px;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #7c3aed, #4ade80);
+  border-radius: 99px;
+  transition: width 0.6s ease;
+}
+
+/* Filter */
+
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.filter-btn {
+  padding: 6px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 20px;
+  border: 1px solid #2e3448;
+  background: #1e2330;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.filter-btn.active {
+  background: #7c3aed;
+  border-color: #7c3aed;
+  color: #fff;
+}
+
+.filter-btn:hover:not(.active) {
+  border-color: #7c3aed;
+  color: #e2e8f0;
+}
+
+.filter-count {
+  margin-left: auto;
+  font-size: 13px;
+  color: #475569;
+}
+
+/* Image grid */
+
+.image-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.image-card {
+  background: #1e2330;
+  border: 1px solid #2e3448;
+  border-radius: 8px;
+  overflow: hidden;
+  transition: border-color 0.15s;
+}
+
+.image-card.done {
+  border-color: #14532d;
+}
+
+.image-card img {
+  width: 100%;
+  aspect-ratio: 16/9;
+  object-fit: cover;
+  display: block;
+}
+
+.image-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  gap: 8px;
+}
+
+.image-name {
+  font-size: 11px;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 20px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.badge-done {
+  background: rgba(74, 222, 128, 0.15);
+  color: #4ade80;
+}
+
+.badge-pending {
+  background: rgba(248, 113, 113, 0.15);
+  color: #f87171;
+}
+
+.badge-no-otters {
+  background: rgba(148, 163, 184, 0.15);
+  color: #94a3b8;
+}
+
+/* ── Modal ── */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.modal {
+  background: #1a1d27;
+  border: 1px solid #2e3448;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  max-width: 92vw;
+  max-height: 95vh;
+  overflow: hidden;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #2e3448;
+}
+
+.modal-filename {
+  font-size: 13px;
+  color: #64748b;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.modal-nav-label {
+  font-size: 13px;
+  color: #475569;
+  white-space: nowrap;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  color: #64748b;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.modal-close:hover {
+  color: #f1f5f9;
+  background: #2e3448;
+}
+
+.modal-canvas-area {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px;
+  flex: 1;
+  overflow: auto;
+}
+
+.modal-loading {
+  color: #475569;
+  font-size: 14px;
+  padding: 60px 80px;
+}
+
+.nav-arrow {
+  background: #1e2330;
+  border: 1px solid #2e3448;
+  color: #94a3b8;
+  font-size: 28px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 0;
+  line-height: 1;
+  transition: all 0.15s;
+}
+
+.nav-arrow:hover:not(:disabled) {
+  background: #2e3448;
+  color: #f1f5f9;
+}
+
+.nav-arrow:disabled {
+  opacity: 0.2;
+  cursor: not-allowed;
+}
+
+.modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-top: 1px solid #2e3448;
+  gap: 12px;
+}
+
+.modal-box-count {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.image-card {
+  cursor: pointer;
+}
+
+.image-card:hover {
+  border-color: #7c3aed;
+}
+
+/* ── Login ── */
+
+.login-screen {
+  min-height: 100svh;
+  background: #0f1117;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.login-card {
+  background: #1a1d27;
+  border: 1px solid #2e3448;
+  border-radius: 12px;
+  padding: 36px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 300px;
+}
+
+.login-card h1 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #f1f5f9;
+  margin: 0 0 4px;
+  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+}
+
+.login-input {
+  background: #0f1117;
+  border: 1px solid #2e3448;
+  border-radius: 7px;
+  padding: 10px 12px;
+  font-size: 14px;
+  color: #f1f5f9;
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.login-input:focus {
+  border-color: #7c3aed;
+}
+
+.login-error {
+  color: #f87171;
+  font-size: 13px;
+  margin: 0;
+  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+}
+
+.login-btn {
+  width: 100%;
+}
+
+/* ── Logout ── */
+
+.logout-btn {
+  background: none;
+  border: 1px solid #2e3448;
+  color: #64748b;
+  font-size: 12px;
+  padding: 5px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.logout-btn:hover {
+  border-color: #f87171;
+  color: #f87171;
+}

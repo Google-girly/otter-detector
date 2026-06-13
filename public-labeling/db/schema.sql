@@ -13,5 +13,6 @@ CREATE TABLE labels (
   image_id UUID REFERENCES images(id),
   labeled_by TEXT NOT NULL,
   boxes JSONB NOT NULL,
+  has_otter BOOLEAN NOT NULL,
   created_at TIMESTAMP DEFAULT NOW()
 );
