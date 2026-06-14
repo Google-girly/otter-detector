@@ -114,7 +114,7 @@ export default function App() {
   return (
     <div className="app">
       <div className="header">
-        <h1>Otter Labeling Tool</h1>
+        <h1>Otter Labeling</h1>
         <div className="box-count">
           <span>{boxes.length}</span> {boxes.length === 1 ? "box" : "boxes"} drawn
         </div>
