@@ -8,23 +8,28 @@ const BACKEND = "";
 const LABELS = ["otter", "not sure"];
 
 export default function App() {
-  const [image, setImage] = useState(null);       // Current image record from DB
-  const [konvaImage, setKonvaImage] = useState(null); // Loaded image for canvas
-  const [boxes, setBoxes] = useState([]);          // Bounding boxes drawn so far
-  const [drawing, setDrawing] = useState(false);   // Is the user currently drawing?
-  const [currentBox, setCurrentBox] = useState(null); // The box being drawn right now
-  const [selectedBox, setSelectedBox] = useState(null); // Index of the selected box
-  // Fetch the next unlabeled image from the backend
+  const [image, setImage] = useState(null);
+  const [konvaImage, setKonvaImage] = useState(null);
+  const [scale, setScale] = useState(1);
+  const [boxes, setBoxes] = useState([]);
+  const [drawing, setDrawing] = useState(false);
+  const [currentBox, setCurrentBox] = useState(null);
+  const [selectedBox, setSelectedBox] = useState(null);
+
   const fetchNextImage = async () => {
     setBoxes([]);
     setSelectedBox(null);
     const res = await axios.get(`${BACKEND}/api/next-image`);
     setImage(res.data);
 
-    // Load the image from Supabase storage so Konva can display it
     const img = new window.Image();
     img.src = `${SUPABASE_URL}/storage/v1/object/public/frames/${res.data.storage_path}`;
-    img.onload = () => setKonvaImage(img);
+    img.onload = () => {
+      const maxW = window.innerWidth - 40;
+      const maxH = window.innerHeight - 160;
+      setScale(Math.min(maxW / img.width, maxH / img.height, 1));
+      setKonvaImage(img);
+    };
   };
 
   useEffect(() => {
@@ -43,16 +48,11 @@ export default function App() {
     return () => window.removeEventListener("keydown", handler);
   }, [selectedBox]);
 
-  // Scale pointer position back to original image coordinates
   const getPos = (e) => {
     const pos = e.target.getStage().getPointerPosition();
-    const maxW = window.innerWidth - 40;
-    const maxH = window.innerHeight - 160;
-    const sc = Math.min(maxW / konvaImage.width, maxH / konvaImage.height, 1);
-    return { x: pos.x / sc, y: pos.y / sc };
+    return { x: pos.x / scale, y: pos.y / scale };
   };
 
-  // When the user clicks down, start drawing a box (unless clicking an existing box)
   const handleMouseDown = (e) => {
     if (e.target.getClassName() === "Rect") return;
     setSelectedBox(null);
@@ -61,7 +61,6 @@ export default function App() {
     setCurrentBox({ x: pos.x, y: pos.y, width: 0, height: 0, label: "otter" });
   };
 
-  // As the user drags, update the box size
   const handleMouseMove = (e) => {
     if (!drawing) return;
     const pos = getPos(e);
@@ -70,6 +69,16 @@ export default function App() {
       width: pos.x - prev.x,
       height: pos.y - prev.y,
     }));
+  };
+
+  const handleTouchStart = (e) => {
+    if (e.evt.touches.length > 1) return;
+    handleMouseDown(e);
+  };
+
+  const handleTouchMove = (e) => {
+    if (e.evt.touches.length > 1) return;
+    handleMouseMove(e);
   };
 
   // When the user releases, save the box
@@ -104,10 +113,6 @@ export default function App() {
 
   if (!konvaImage) return <p className="loading">Loading image...</p>;
 
-  // Scale image to fit within the viewport (leaving room for header + buttons)
-  const maxW = window.innerWidth - 40;
-  const maxH = window.innerHeight - 160;
-  const scale = Math.min(maxW / konvaImage.width, maxH / konvaImage.height, 1);
   const stageW = konvaImage.width * scale;
   const stageH = konvaImage.height * scale;
 
@@ -127,8 +132,8 @@ export default function App() {
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
-          onTouchStart={handleMouseDown}
-          onTouchMove={handleMouseMove}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
           onTouchEnd={handleMouseUp}
           style={{ touchAction: "none" }}
         >
