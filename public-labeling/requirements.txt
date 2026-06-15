@@ -1,3 +1,5 @@
 fastapi
 supabase
 python-dotenv
+requests
+Pillow
