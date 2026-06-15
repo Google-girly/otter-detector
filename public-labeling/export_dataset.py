@@ -117,5 +117,5 @@ names: ['Southern Sea Otter']
 
 print(f"\nDone! {splits['train'].__len__()} train / {splits['valid'].__len__()} val")
 print(f"Dataset saved to: {OUT_DIR.resolve()}")
-print(f"\nTo fine-tune, run from preliminary-model/:")
-print(f"  yolo train model=yolo26n.pt data=../{OUT_DIR}/data.yaml epochs=50 imgsz=640")
+print(f"\nTo fine-tune your existing model, run from public-labeling/:")
+print(f"  yolo detect train model=../models/otter_v1.pt data={OUT_DIR.resolve() / 'data.yaml'} epochs=50 imgsz=640 lr0=0.0001")
