@@ -1,0 +1,5 @@
+train: C:\Users\desir\OneDrive\Desktop\otter-detector\public-labeling\dataset\train\images
+val: C:\Users\desir\OneDrive\Desktop\otter-detector\public-labeling\dataset\valid\images
+
+nc: 1
+names: ['Southern Sea Otter']

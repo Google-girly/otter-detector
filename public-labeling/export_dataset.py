@@ -77,8 +77,11 @@ done = 0
 
 for split_name, images in splits.items():
     for row in images:
-        filename = row["filename"]
         storage_path = row["storage_path"]
+        # derive filename from storage_path — some rows have empty filename from the populate SQL
+        filename = os.path.basename(storage_path) or row["filename"]
+        if not filename:
+            continue
         boxes = row["labels"][0]["boxes"] if row.get("labels") else []
 
         # download
