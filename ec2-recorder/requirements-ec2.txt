@@ -1,0 +1,5 @@
+# Recorder deps — no ultralytics/torch needed since we only do motion detection.
+yt-dlp==2026.3.17
+opencv-python-headless==4.13.0.92   # headless: no GUI libs, smaller, correct for a server
+numpy
+boto3
