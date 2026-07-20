@@ -2,7 +2,7 @@ import yt_dlp
 import cv2
 from ultralytics import YOLO
 
-model = YOLO("runs/detect/train/weights/best.pt")
+model = YOLO("../models/otter_v1.pt")
 
 # options to control yt-dlp's behavior
 ydl_opts = {
@@ -42,14 +42,22 @@ while True:
     #     print("Image saved as c1.png")
 
     # Perform object detection on an image
+    # if count % 10 == 0:  # process every 10th frame
+    #     results = model(frame, conf = 0.4)  # set confidence threshold to 0.5
+    # else:
+    #     results = model(frame, conf = 0.4, verbose=False)  # set confidence threshold to 0.5 and suppress output
+
+
+    # run this on mac
     if count % 10 == 0:  # process every 10th frame
-        results = model(frame, conf = 0.5)  # set confidence threshold to 0.5
+        results = model(frame, conf = 0.4, device='mps')  # set confidence threshold to 0.5
     else:
-        results = model(frame, conf = 0.5, verbose=False)  # set confidence threshold to 0.5 and suppress output
+        results = model(frame, conf = 0.4, verbose=False, device='mps')  # set confidence threshold to 0.5 and suppress output
+
 
     new_frame = results[0].plot()  # get the first result and plot the detections on the frame
 
-    cv2.imshow('Otter Cam', new_frame)  # display the frame in a window
+    cv2.imshow('Otter Cam 1', new_frame)  # display the frame in a window
     # cv2.imshow('Otter Cam', frame)  # display the original frame in a window
 
     count += 1
