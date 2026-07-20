@@ -37,8 +37,18 @@ it to the EC2 instance as its *instance profile*:
 
 ### 3. Launch an instance
 - **AMI:** Ubuntu 22.04 or 24.04 LTS
-- **Type:** `t3.small` is plenty for 480p motion detection. Bump to `t3.medium`
-  if you raise resolution/FPS. No GPU needed.
+- **Type:** `t3.small` (2 vCPU / 2 GB), no GPU needed. It's a *burstable*
+  instance: ~40% total CPU sustained on credits, bursts spend a credit balance.
+  720p idle-watching fits in baseline; encoding during long otter sessions
+  bursts above it. Two things keep `t3.small` happy at 720p:
+  - Run at **`FPS=10`** (see the service file) — lighter decode + encode.
+  - Enable **T3 unlimited mode** so a credit crunch throttles your wallet a few
+    cents instead of throttling the recorder:
+    ```sh
+    aws ec2 modify-instance-credit-specification \
+      --instance-credit-specification "InstanceId=i-XXXX,CpuCredits=unlimited"
+    ```
+  If CPU is still pinned, drop to 480p (`WIDTH=854 HEIGHT=480`).
 - **Storage:** 20 GB gp3 is fine — clips are deleted locally right after upload,
   so disk only holds in-flight clips.
 - Attach the instance profile from step 2. No security-group inbound rules are
@@ -78,6 +88,71 @@ sudo systemctl enable --now otter-recorder
 journalctl -u otter-recorder -f                          # watch the logs
 ```
 
+## Run only during stream hours (7am–7pm Pacific)
+
+The otter cam is only live 7am–7pm PT. There's no reason to pay for the instance
+(or let it uselessly retry) overnight, so we auto-**start** it at 6:55am and
+auto-**stop** it at 7:05pm. Because the recorder is a systemd service set to
+`enable` (above), it launches by itself the moment the instance powers on — so
+"turn the computer on" == "start recording." Nothing else to trigger.
+
+This uses **EventBridge Scheduler**, which understands time zones directly, so it
+follows Pacific daylight-saving changes on its own — no UTC math, no twice-a-year
+fix. Run these once from your laptop (fill in your account ID and instance ID):
+
+```sh
+ACCOUNT_ID=123456789012          # aws sts get-caller-identity --query Account --output text
+INSTANCE_ID=i-0abc123def456       # your recorder instance
+REGION=us-west-2
+
+# 1. A role the scheduler assumes, allowed only to start/stop this one instance.
+aws iam create-role --role-name otter-scheduler-role \
+  --assume-role-policy-document '{
+    "Version":"2012-10-17",
+    "Statement":[{"Effect":"Allow",
+      "Principal":{"Service":"scheduler.amazonaws.com"},
+      "Action":"sts:AssumeRole"}]}'
+
+aws iam put-role-policy --role-name otter-scheduler-role \
+  --policy-name start-stop-ec2 --policy-document "{
+    \"Version\":\"2012-10-17\",
+    \"Statement\":[{\"Effect\":\"Allow\",
+      \"Action\":[\"ec2:StartInstances\",\"ec2:StopInstances\"],
+      \"Resource\":\"arn:aws:ec2:${REGION}:${ACCOUNT_ID}:instance/${INSTANCE_ID}\"}]}"
+
+ROLE_ARN=arn:aws:iam::${ACCOUNT_ID}:role/otter-scheduler-role
+
+# 2. Turn ON at 6:55am Pacific, every day.
+aws scheduler create-schedule --name otter-cam-start \
+  --schedule-expression "cron(55 6 * * ? *)" \
+  --schedule-expression-timezone "America/Los_Angeles" \
+  --flexible-time-window '{"Mode":"OFF"}' \
+  --target "{\"Arn\":\"arn:aws:scheduler:::aws-sdk:ec2:startInstances\",
+             \"RoleArn\":\"${ROLE_ARN}\",
+             \"Input\":\"{\\\"InstanceIds\\\":[\\\"${INSTANCE_ID}\\\"]}\"}"
+
+# 3. Turn OFF at 7:05pm Pacific, every day.
+aws scheduler create-schedule --name otter-cam-stop \
+  --schedule-expression "cron(5 19 * * ? *)" \
+  --schedule-expression-timezone "America/Los_Angeles" \
+  --flexible-time-window '{"Mode":"OFF"}' \
+  --target "{\"Arn\":\"arn:aws:scheduler:::aws-sdk:ec2:stopInstances\",
+             \"RoleArn\":\"${ROLE_ARN}\",
+             \"Input\":\"{\\\"InstanceIds\\\":[\\\"${INSTANCE_ID}\\\"]}\"}"
+```
+
+Prefer clicking? Console → **EventBridge → Scheduler → Schedules → Create**, make
+two schedules with the cron/timezone above, target **EC2 → StartInstances** /
+**StopInstances**, and let it create the role for you.
+
+**Why this also fixes the CPU worry:** the overnight shutdown gives the burstable
+`t3.small` ~12 hours to fully recharge its CPU credits every night, so it starts
+each morning at full strength. Cost drops too — you pay for ~12 hours/day, not 24.
+
+Sanity checks: after 7pm the instance should show `stopped` in the EC2 console
+(you're not billed for stopped compute); a couple minutes after 6:55am it should
+be `running` and `journalctl -u otter-recorder -f` should show clips again.
+
 ## Tuning (all via env vars — see the CONFIG block in the script)
 
 | Var | Default | What it does |
@@ -85,10 +160,10 @@ journalctl -u otter-recorder -f                          # watch the logs
 | `MOTION_AREA_FRAC` | `0.004` | Fraction of the frame that must change to count as motion. **Raise it** if water ripples trigger recording; lower it to catch smaller movement. |
 | `VAR_THRESHOLD` | `40` | MOG2 sensitivity. Higher = less sensitive. |
 | `PREROLL_SECONDS` | `3` | Seconds kept *before* motion started (so clips don't start mid-action). |
-| `TAIL_SECONDS` | `4` | Keep recording this long after motion stops (avoids chopping a clip into pieces during brief pauses). |
+| `TAIL_SECONDS` | `15` | Keep recording this long after motion stops before closing the clip. Bigger = longer, fewer clips (won't split during brief pauses). |
 | `MAX_CLIP_SECONDS` | `600` | Hard cap so one long event can't produce a giant file. |
 | `FPS` | `15` | Record frame rate. Lower = smaller files, less CPU. |
-| `WIDTH`/`HEIGHT` | `854`/`480` | Capture resolution. |
+| `WIDTH`/`HEIGHT` | `1280`/`720` | Capture resolution (720p). Drop to `854`/`480` to save CPU/bandwidth. |
 
 ## Notes / gotchas
 

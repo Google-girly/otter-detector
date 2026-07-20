@@ -11,7 +11,8 @@ WorkingDirectory=/opt/otter-recorder
 Environment=S3_BUCKET=CHANGE-ME-otter-clips
 Environment=AWS_REGION=us-west-2
 Environment=YOUTUBE_URL=https://www.youtube.com/watch?v=abbR-Ttd-cA
-Environment=FPS=15
+# FPS=10 keeps 720p encoding within a t3.small's CPU budget (see README).
+Environment=FPS=10
 ExecStart=/opt/otter-recorder/.venv/bin/python /opt/otter-recorder/motion_recorder.py
 Restart=always
 RestartSec=10

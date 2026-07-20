@@ -39,8 +39,8 @@ AWS_REGION    = os.environ.get("AWS_REGION", "us-west-2")
 # so keep it off on a headless server). Set PREVIEW=1 to enable.
 PREVIEW       = os.environ.get("PREVIEW", "0") == "1"
 
-WIDTH         = int(os.environ.get("WIDTH", 854))
-HEIGHT        = int(os.environ.get("HEIGHT", 480))
+WIDTH         = int(os.environ.get("WIDTH", 1280))
+HEIGHT        = int(os.environ.get("HEIGHT", 720))
 FPS           = int(os.environ.get("FPS", 15))               # output/record frame rate
 FRAME_SIZE    = WIDTH * HEIGHT * 3                            # bytes per raw bgr24 frame
 
@@ -51,7 +51,7 @@ WARMUP_FRAMES    = int(os.environ.get("WARMUP_FRAMES", FPS * 5))     # let the b
 
 # Clip shaping
 PREROLL_SECONDS   = float(os.environ.get("PREROLL_SECONDS", 3))      # seconds kept before motion started
-TAIL_SECONDS      = float(os.environ.get("TAIL_SECONDS", 4))         # keep recording this long after motion stops
+TAIL_SECONDS      = float(os.environ.get("TAIL_SECONDS", 15))        # keep recording this long after motion stops
 MAX_CLIP_SECONDS  = float(os.environ.get("MAX_CLIP_SECONDS", 600))   # hard cap so a clip can't run forever
 
 WORK_DIR = os.environ.get("WORK_DIR", "/tmp/otter-clips")
