@@ -12,6 +12,11 @@ __pycache__/
 # Training runs and outputs
 runs/
 
+# Recorder test clips (local test output — don't commit)
+test-clips/
+ec2-recorder/test-clips/
+*.mp4
+
 # Dataset images (re-download from Roboflow)
 dataset/train/images/
 dataset/valid/images/

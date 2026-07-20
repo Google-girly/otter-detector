@@ -1,0 +1,22 @@
+[Unit]
+Description=Otter cam motion-triggered recorder
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/otter-recorder
+# Edit these for your deployment (or use an EnvironmentFile — see README).
+Environment=S3_BUCKET=CHANGE-ME-otter-clips
+Environment=AWS_REGION=us-west-2
+Environment=YOUTUBE_URL=https://www.youtube.com/watch?v=abbR-Ttd-cA
+Environment=FPS=15
+ExecStart=/opt/otter-recorder/.venv/bin/python /opt/otter-recorder/motion_recorder.py
+Restart=always
+RestartSec=10
+# Never fill the disk if S3 uploads back up:
+RuntimeMaxSec=infinity
+
+[Install]
+WantedBy=multi-user.target

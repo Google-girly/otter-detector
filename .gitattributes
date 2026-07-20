@@ -1,0 +1,11 @@
+# Normalize line endings: store everything as LF in the repo and check out as LF.
+# This prevents the CRLF churn that made ~300 files show as "modified".
+* text=auto eol=lf
+
+# Binary / non-text files git should never touch.
+*.pt    binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.svg   binary
+*.mp4   binary
