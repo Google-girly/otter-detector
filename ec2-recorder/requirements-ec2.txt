@@ -3,3 +3,4 @@ yt-dlp==2026.3.17
 opencv-python-headless==4.13.0.92   # headless: no GUI libs, smaller, correct for a server
 numpy
 boto3
+tzdata     # ensures the America/Los_Angeles zone resolves even on a minimal image
