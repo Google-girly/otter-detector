@@ -22,6 +22,7 @@ import os
 import subprocess
 import threading
 import time
+from zoneinfo import ZoneInfo
 
 import cv2
 import numpy as np
@@ -29,11 +30,20 @@ import yt_dlp
 
 # ── Config (all overridable via environment variables) ──────────────────────────
 YOUTUBE_URL   = os.environ.get("YOUTUBE_URL", "https://www.youtube.com/watch?v=abbR-Ttd-cA")
+# After hours cam https://www.youtube.com/watch?v=sq35qS1iVYU&t=2s
+# YOUTUBE_URL   = os.environ.get("YOUTUBE_URL", "https://www.youtube.com/watch?v=abbR-Ttd-cA")
+# After hours cam 
+# YOUTUBE_URL   = os.environ.get("YOUTUBE_URL", "https://www.youtube.com/watch?v=sq35qS1iVYU&t=2s")
 # S3_BUCKET is OPTIONAL. Leave it unset to run in LOCAL mode: clips are written to
 # WORK_DIR and kept on disk instead of being uploaded/deleted. Great for testing.
 S3_BUCKET     = os.environ.get("S3_BUCKET")
 S3_PREFIX     = os.environ.get("S3_PREFIX", "clips")          # key prefix inside the bucket
-AWS_REGION    = os.environ.get("AWS_REGION", "us-west-2")
+AWS_REGION    = os.environ.get("AWS_REGION", "us-east-2")
+
+# Path to a Netscape-format cookies.txt exported from a browser logged into YouTube.
+# Required on cloud/datacenter IPs (e.g. EC2), which YouTube challenges with a
+# "confirm you're not a bot" gate. Unset is fine for local runs from home.
+COOKIES_FILE  = os.environ.get("COOKIES_FILE")
 
 # Show a live preview window with the motion mask (local testing only — needs a GUI,
 # so keep it off on a headless server). Set PREVIEW=1 to enable.
@@ -45,7 +55,7 @@ FPS           = int(os.environ.get("FPS", 15))               # output/record fra
 FRAME_SIZE    = WIDTH * HEIGHT * 3                            # bytes per raw bgr24 frame
 
 # Motion sensitivity
-MOTION_AREA_FRAC = float(os.environ.get("MOTION_AREA_FRAC", 0.004))  # fraction of frame that must change
+MOTION_AREA_FRAC = float(os.environ.get("MOTION_AREA_FRAC", 0.012))  # fraction of frame that must change (raised to ignore water ripples)
 VAR_THRESHOLD    = int(os.environ.get("VAR_THRESHOLD", 40))          # MOG2 sensitivity (higher = less sensitive)
 WARMUP_FRAMES    = int(os.environ.get("WARMUP_FRAMES", FPS * 5))     # let the background model settle first
 
@@ -54,10 +64,19 @@ PREROLL_SECONDS   = float(os.environ.get("PREROLL_SECONDS", 3))      # seconds k
 TAIL_SECONDS      = float(os.environ.get("TAIL_SECONDS", 15))        # keep recording this long after motion stops
 MAX_CLIP_SECONDS  = float(os.environ.get("MAX_CLIP_SECONDS", 600))   # hard cap so a clip can't run forever
 
+HEARTBEAT_SECONDS = float(os.environ.get("HEARTBEAT_SECONDS", 60))    # log "still alive + motion level" while idle
+
+# Clips are named + date-partitioned using this timezone (default: the cam's local
+# Pacific time). Handles daylight saving automatically.
+LOCAL_TZ = ZoneInfo(os.environ.get("TZ_NAME", "America/Los_Angeles"))
+
 WORK_DIR = os.environ.get("WORK_DIR", "/tmp/otter-clips")
 os.makedirs(WORK_DIR, exist_ok=True)
 
-FOURCC = cv2.VideoWriter_fourcc(*"mp4v")
+# Clips are encoded by piping raw frames into ffmpeg's libx264 (real H.264) —
+# far clearer + smaller than OpenCV's built-in mp4v, and identical on Mac/Linux.
+CRF            = int(os.environ.get("CRF", 20))                   # quality: lower = clearer + bigger (18-23 sane)
+ENCODER_PRESET = os.environ.get("ENCODER_PRESET", "veryfast")    # CPU vs compression; veryfast suits a t3.small
 
 # Only create an S3 client (and require boto3) when we actually have a bucket.
 s3 = None
@@ -71,6 +90,8 @@ def get_stream_url():
     """Resolve a fresh direct stream URL. YouTube's URLs expire, so we re-resolve
     whenever ffmpeg dies."""
     ydl_opts = {"quiet": True, "format": f"best[height<={HEIGHT}]/best"}
+    if COOKIES_FILE:
+        ydl_opts["cookiefile"] = COOKIES_FILE
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(YOUTUBE_URL, download=False)
         return info["url"]
@@ -103,6 +124,21 @@ def read_frame(process):
     return np.frombuffer(raw, np.uint8).reshape((HEIGHT, WIDTH, 3))
 
 
+def start_encoder(path):
+    """Start an ffmpeg process that encodes raw BGR frames (written to its stdin)
+    into an H.264 mp4. Replaces OpenCV's mp4v writer for much clearer output."""
+    cmd = [
+        "ffmpeg", "-y",
+        "-f", "rawvideo", "-pix_fmt", "bgr24",
+        "-s", f"{WIDTH}x{HEIGHT}", "-r", str(FPS),
+        "-i", "pipe:0",
+        "-c:v", "libx264", "-preset", ENCODER_PRESET, "-crf", str(CRF),
+        "-pix_fmt", "yuv420p",   # required for the clip to play in browsers/QuickTime
+        path,
+    ]
+    return subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
+
+
 # ── S3 upload ────────────────────────────────────────────────────────────────────
 def upload_and_cleanup(local_path):
     """Upload one finished clip to S3 (date-partitioned key) then delete it locally.
@@ -113,8 +149,12 @@ def upload_and_cleanup(local_path):
         print(f"[local] kept clip {local_path}", flush=True)
         return
     fname = os.path.basename(local_path)
-    now = dt.datetime.utcnow()
-    key = f"{S3_PREFIX}/{now:%Y/%m/%d}/{fname}"
+    # Date-partition from the filename (otters-YYYY-MM-DD-...) so key + name agree.
+    try:
+        _, yyyy, mm, dd, *_ = fname.split("-")
+        key = f"{S3_PREFIX}/{yyyy}/{mm}/{dd}/{fname}"
+    except ValueError:
+        key = f"{S3_PREFIX}/{dt.datetime.now(LOCAL_TZ):%Y/%m/%d}/{fname}"
     try:
         s3.upload_file(local_path, S3_BUCKET, key, ExtraArgs={"ContentType": "video/mp4"})
         print(f"[s3] uploaded s3://{S3_BUCKET}/{key}", flush=True)
@@ -147,16 +187,29 @@ def main():
     clip_path = None
     clip_start = 0.0
     last_motion = 0.0
+    last_heartbeat = 0.0
     frames_seen = 0
+    used_names = set()  # guard against two clips sharing a same-minute filename
 
     def close_clip():
         nonlocal writer, clip_path
         if writer is not None:
-            writer.release()
+            try:
+                writer.stdin.close()   # signal end-of-input; ffmpeg flushes + finalizes the mp4
+            except (BrokenPipeError, OSError):
+                pass
+            writer.wait()              # wait for the file to be fully written before uploading
             print(f"[clip] closed {os.path.basename(clip_path)}", flush=True)
             threading.Thread(target=upload_and_cleanup, args=(clip_path,), daemon=True).start()
             writer = None
             clip_path = None
+
+    def write_frame(f):
+        """Send one raw frame to the encoder; swallow the broken pipe if ffmpeg died."""
+        try:
+            writer.stdin.write(f.tobytes())
+        except (BrokenPipeError, OSError):
+            pass
 
     while True:
         # (Re)start ffmpeg with a fresh URL whenever it isn't running.
@@ -193,21 +246,31 @@ def main():
         motion_pixels = cv2.countNonZero(mask) * 4  # *4 undoes the half-res downscale
         motion = frames_seen > WARMUP_FRAMES and motion_pixels > min_motion_pixels
 
+        # --- heartbeat: prove we're alive while idle (nothing else logs during quiet) ---
+        if writer is None and now - last_heartbeat > HEARTBEAT_SECONDS:
+            last_heartbeat = now
+            state = "warming up" if frames_seen <= WARMUP_FRAMES else "idle, watching"
+            print(f"[hb] {state} | motion_px={motion_pixels} (trips at {int(min_motion_pixels)})", flush=True)
+
         # --- state machine ---
         if writer is None:
             preroll.append(frame)
             if motion:
-                ts = dt.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
-                clip_path = os.path.join(WORK_DIR, f"otter_{ts}.mp4")
-                writer = cv2.VideoWriter(clip_path, FOURCC, FPS, (WIDTH, HEIGHT))
+                base = f"otters-{dt.datetime.now(LOCAL_TZ):%Y-%m-%d-%H%M}"
+                name, n = base, 2
+                while name in used_names or os.path.exists(os.path.join(WORK_DIR, name + ".mp4")):
+                    name, n = f"{base}-{n}", n + 1   # 2nd clip in the same minute -> otters-...-2.mp4
+                used_names.add(name)
+                clip_path = os.path.join(WORK_DIR, name + ".mp4")
+                writer = start_encoder(clip_path)
                 for f in preroll:  # flush the pre-roll into the clip
-                    writer.write(f)
+                    write_frame(f)
                 preroll.clear()
                 clip_start = now
                 last_motion = now
                 print(f"[clip] motion -> recording {os.path.basename(clip_path)}", flush=True)
         else:
-            writer.write(frame)
+            write_frame(frame)
             if motion:
                 last_motion = now
             quiet_for = now - last_motion

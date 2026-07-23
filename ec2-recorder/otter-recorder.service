@@ -9,10 +9,13 @@ User=ubuntu
 WorkingDirectory=/opt/otter-recorder
 # Edit these for your deployment (or use an EnvironmentFile — see README).
 Environment=S3_BUCKET=CHANGE-ME-otter-clips
-Environment=AWS_REGION=us-west-2
+Environment=AWS_REGION=us-east-2
 Environment=YOUTUBE_URL=https://www.youtube.com/watch?v=abbR-Ttd-cA
 # FPS=10 keeps 720p encoding within a t3.small's CPU budget (see README).
 Environment=FPS=10
+# YouTube blocks datacenter IPs without a logged-in identity — see README "YouTube
+# bot check". Export cookies to this path on the instance.
+Environment=COOKIES_FILE=/opt/otter-recorder/cookies.txt
 ExecStart=/opt/otter-recorder/.venv/bin/python /opt/otter-recorder/motion_recorder.py
 Restart=always
 RestartSec=10

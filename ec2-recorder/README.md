@@ -16,7 +16,7 @@ YouTube live ──▶ ffmpeg (raw frames) ──▶ motion_recorder.py
 
 ### 1. S3 bucket
 ```sh
-aws s3 mb s3://your-otter-clips --region us-west-2
+aws s3 mb s3://your-otter-clips --region us-east-2
 ```
 
 ### 2. IAM role for the instance
@@ -73,7 +73,7 @@ python3 -m venv .venv
 
 Quick manual test before installing the service:
 ```sh
-S3_BUCKET=your-otter-clips AWS_REGION=us-west-2 .venv/bin/python motion_recorder.py
+S3_BUCKET=your-otter-clips AWS_REGION=us-east-2 .venv/bin/python motion_recorder.py
 # wave something in front of the cam / wait for otter activity, then check:
 aws s3 ls s3://your-otter-clips/clips/ --recursive
 ```
@@ -103,7 +103,7 @@ fix. Run these once from your laptop (fill in your account ID and instance ID):
 ```sh
 ACCOUNT_ID=123456789012          # aws sts get-caller-identity --query Account --output text
 INSTANCE_ID=i-0abc123def456       # your recorder instance
-REGION=us-west-2
+REGION=us-east-2
 
 # 1. A role the scheduler assumes, allowed only to start/stop this one instance.
 aws iam create-role --role-name otter-scheduler-role \
@@ -157,13 +157,21 @@ be `running` and `journalctl -u otter-recorder -f` should show clips again.
 
 | Var | Default | What it does |
 |-----|---------|--------------|
-| `MOTION_AREA_FRAC` | `0.004` | Fraction of the frame that must change to count as motion. **Raise it** if water ripples trigger recording; lower it to catch smaller movement. |
+| `MOTION_AREA_FRAC` | `0.012` | Fraction of the frame that must change to count as motion. **Raise it** if water ripples trigger recording; lower it to catch smaller movement. |
 | `VAR_THRESHOLD` | `40` | MOG2 sensitivity. Higher = less sensitive. |
 | `PREROLL_SECONDS` | `3` | Seconds kept *before* motion started (so clips don't start mid-action). |
 | `TAIL_SECONDS` | `15` | Keep recording this long after motion stops before closing the clip. Bigger = longer, fewer clips (won't split during brief pauses). |
 | `MAX_CLIP_SECONDS` | `600` | Hard cap so one long event can't produce a giant file. |
 | `FPS` | `15` | Record frame rate. Lower = smaller files, less CPU. |
 | `WIDTH`/`HEIGHT` | `1280`/`720` | Capture resolution (720p). Drop to `854`/`480` to save CPU/bandwidth. |
+| `HEARTBEAT_SECONDS` | `60` | How often to log a "still alive + current motion level" line while idle. |
+| `CRF` | `20` | H.264 quality. **Lower = clearer + bigger files** (18 near-lossless, 23 smaller). |
+| `ENCODER_PRESET` | `veryfast` | libx264 speed/compression tradeoff. `veryfast` keeps CPU low for a t3.small; `slow` = smaller files, more CPU. |
+| `TZ_NAME` | `America/Los_Angeles` | Timezone used for clip names + S3 date folders. Handles daylight saving on its own. |
+
+Clips are named `otters-YYYY-MM-DD-HHMM.mp4` in local (Pacific) time, and upload
+to `clips/YYYY/MM/DD/` matching that name. Two clips in the same minute get a
+`-2`, `-3` suffix so nothing is overwritten.
 
 ## Notes / gotchas
 
@@ -174,9 +182,11 @@ be `running` and `journalctl -u otter-recorder -f` should show clips again.
   YouTube URL and restarts, discarding any half-written clip.
 - **Uploads are async:** each finished clip uploads in a background thread and is
   deleted locally on success, so recording never blocks on S3.
-- **Codec:** `mp4v` in an `.mp4` container (bundled with opencv). If you need H.264
-  (smaller / better browser support), transcode in a Lambda triggered by the S3
-  upload, or install a full ffmpeg build and pipe through it.
+- **Codec:** clips are encoded with **H.264 (libx264)** by piping frames into a
+  second ffmpeg process — clearer and smaller than opencv's built-in mp4v, and
+  browser/QuickTime-friendly (`yuv420p`). This needs the system `ffmpeg` to
+  include libx264, which Ubuntu's `apt install ffmpeg` provides. Tune quality with
+  `CRF` and CPU cost with `ENCODER_PRESET`.
 - **Cost ballpark:** `t3.small` on-demand ≈ $15/mo + S3 storage/egress. Use a
   spot instance or stop it overnight to cut that further.
 ```

@@ -17,6 +17,10 @@ test-clips/
 ec2-recorder/test-clips/
 *.mp4
 
+# YouTube cookies — contains login session tokens, never commit
+cookies.txt
+ec2-recorder/cookies.txt
+
 # Dataset images (re-download from Roboflow)
 dataset/train/images/
 dataset/valid/images/
