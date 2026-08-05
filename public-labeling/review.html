@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Otter Model Review — otter_v2</title>
+<style>
+  :root { --bg:#0f1720; --card:#18232f; --line:#2a3a4a; --fg:#e7eef5; --muted:#8fa6b8; --accent:#3aa0ff; --good:#35e07f; --bad:#ff4d4d; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.5 system-ui, sans-serif; background:var(--bg); color:var(--fg); }
+  header { padding:12px 18px; border-bottom:1px solid var(--line); display:flex; gap:18px; align-items:center; flex-wrap:wrap; }
+  header h1 { font-size:16px; margin:0; }
+  .who { margin-left:auto; display:flex; gap:8px; align-items:center; }
+  input[type=text], input.notes, header input { background:var(--card); border:1px solid var(--line); color:var(--fg); border-radius:6px; padding:6px 9px; font:inherit; }
+  main { max-width:980px; margin:0 auto; padding:18px; }
+  .stage { position:relative; display:inline-block; max-width:100%; background:#000; border-radius:8px; overflow:hidden; cursor:crosshair; }
+  .stage img { display:block; max-width:100%; height:auto; user-select:none; -webkit-user-drag:none; }
+  .box { position:absolute; border:2px solid var(--bad); box-shadow:0 0 0 1px rgba(0,0,0,.5); pointer-events:none; }
+  .box span { position:absolute; top:-20px; left:-2px; background:var(--bad); color:#fff; font-size:11px; padding:1px 5px; border-radius:3px 3px 0 0; white-space:nowrap; }
+  .drawbox { position:absolute; border:2px solid var(--good); background:rgba(53,224,127,.12); pointer-events:none; }
+  .meta { color:var(--muted); margin:10px 0; font-size:13px; display:flex; gap:14px; flex-wrap:wrap; }
+  .pill { background:var(--card); border:1px solid var(--line); border-radius:999px; padding:2px 10px; }
+  .toolbar { display:flex; gap:12px; align-items:center; margin:8px 0; color:var(--muted); font-size:13px; flex-wrap:wrap; }
+  .toolbar button, .step button { background:var(--card); border:1px solid var(--line); color:var(--fg); border-radius:6px; padding:5px 10px; cursor:pointer; }
+  .toolbar button:hover { border-color:var(--accent); }
+  .drawn-count { color:var(--good); font-weight:600; }
+
+  .verdicts { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin:14px 0; }
+  button.v { padding:12px 10px; border-radius:9px; border:1px solid var(--line); background:var(--card); color:var(--fg); cursor:pointer; text-align:left; }
+  button.v:hover { border-color:var(--accent); }
+  button.v.selected { border-color:var(--accent); background:#123047; box-shadow:0 0 0 1px var(--accent) inset; }
+  button.v b { display:block; font-size:15px; }
+  button.v small { color:var(--muted); }
+  button.v kbd { float:right; background:#0c141c; border:1px solid var(--line); border-radius:4px; padding:0 6px; font-size:12px; }
+
+  .counts { display:flex; gap:20px; align-items:center; flex-wrap:wrap; background:var(--card); border:1px solid var(--line); border-radius:9px; padding:12px 14px; margin:12px 0; }
+  .counts .grp { display:flex; gap:8px; align-items:center; }
+  .counts b { font-size:16px; }
+  .step { display:inline-flex; align-items:center; gap:8px; }
+  .step button { width:30px; height:30px; font-size:18px; line-height:1; padding:0; }
+  .step .val { min-width:22px; text-align:center; font-size:17px; font-weight:700; }
+  .tp { color:var(--good); } .fp { color:var(--bad); } .fn { color:#ffb454; }
+  label.chk { display:flex; gap:6px; align-items:center; color:var(--muted); }
+
+  .nextbar { display:flex; gap:12px; align-items:center; margin:14px 0; }
+  #next { padding:12px 26px; border-radius:9px; border:1px solid var(--accent); background:var(--accent); color:#04121f; font-weight:700; font-size:15px; cursor:pointer; }
+  #next:disabled { opacity:.4; cursor:not-allowed; }
+  .nextbar .hint { color:var(--muted); font-size:13px; }
+
+  .scoreboard { margin-top:22px; border-top:1px solid var(--line); padding-top:14px; font-size:13px; }
+  .scoreboard td { padding:2px 14px 2px 0; }
+  .big { font-size:20px; font-weight:700; }
+  .msg { padding:40px; text-align:center; color:var(--muted); }
+  .toast { position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:var(--accent); color:#04121f; padding:8px 16px; border-radius:8px; opacity:0; transition:opacity .2s; font-weight:600; }
+  .toast.show { opacity:1; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🦦 otter_v2 review</h1>
+  <span id="progress" class="pill">—</span>
+  <div class="who">
+    <label>API <input id="api" value="http://127.0.0.1:8000/api" size="26"></label>
+    <label>you <input id="reviewer" placeholder="your name" size="12"></label>
+  </div>
+</header>
+
+<main>
+  <div id="content"><div class="msg">Loading…</div></div>
+
+  <div class="toolbar" id="toolbar" hidden>
+    <span>🟥 model &nbsp; 🟩 your box</span>
+    <span>Drag on the image to box a <b>missed</b> otter.</span>
+    <button id="clearBoxes">Clear my boxes (u)</button>
+    <span class="drawn-count" id="drawnCount"></span>
+  </div>
+
+  <!-- Quick shortcuts for the common single-otter cases -->
+  <div class="verdicts" id="verdicts" hidden>
+    <button class="v" data-preset="correct"><kbd>1</kbd><b>✅ Correct</b><small>all boxes on otters</small></button>
+    <button class="v" data-preset="missed"><kbd>2</kbd><b>Missed otter</b><small>otter there, no box — draw it</small></button>
+    <button class="v" data-preset="false_alarm"><kbd>3</kbd><b>False alarm</b><small>box(es), but no otter</small></button>
+    <button class="v" data-preset="box_off"><kbd>4</kbd><b>Box off</b><small>right, but sloppy box</small></button>
+    <button class="v" data-preset="correctly_empty"><kbd>5</kbd><b>Correctly empty</b><small>no otter, no box</small></button>
+  </div>
+
+  <!-- Per-frame counts (for multi-otter / mixed frames) -->
+  <div class="counts" id="counts" hidden>
+    <div class="grp">Model drew <b id="nBoxes">0</b> box(es).</div>
+    <div class="grp">
+      <span class="tp">Correct</span>
+      <span class="step">
+        <button id="kMinus">−</button><span class="val tp" id="kVal">0</span><button id="kPlus">+</button>
+      </span>
+    </div>
+    <div class="grp"><span class="fp">False alarms:</span> <b class="fp" id="fVal">0</b></div>
+    <div class="grp"><span class="fn">Missed:</span> <b class="fn" id="mVal">0</b> <small>(draw them)</small></div>
+    <label class="chk"><input type="checkbox" id="boxoff"> box off (sloppy)</label>
+  </div>
+
+  <input class="notes" id="notes" placeholder="optional note" hidden>
+  <div class="nextbar" id="nextbar" hidden>
+    <button id="next" disabled>Next →</button>
+    <span class="hint">Pick a shortcut (1–5) or set the counts, draw any missed otters, then Next (Enter).</span>
+  </div>
+
+  <div class="scoreboard" id="scoreboard"></div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const api = () => $("#api").value.replace(/\/$/, "");
+let current = null;
+let drawn = [];        // human-drawn (missed) boxes in ORIGINAL image px {x,y,width,height}
+let drag = null;       // active drag while drawing
+let N = 0;             // number of model boxes on the current frame
+let k = 0;             // how many of those are correct (True Positives)
+let boxOff = false;
+let touched = false;   // has the reviewer set anything on this frame yet
+
+function toast(t) { const el=$("#toast"); el.textContent=t; el.classList.add("show"); setTimeout(()=>el.classList.remove("show"),1300); }
+
+async function loadNext() {
+  ["verdicts","counts","toolbar","nextbar"].forEach(id => $("#"+id).hidden = true);
+  $("#notes").hidden = true;
+  clearDrawn();
+  clearSelection();
+  $("#content").innerHTML = '<div class="msg">Loading…</div>';
+  let p;
+  try { p = await (await fetch(api()+"/eval/next")).json(); }
+  catch { $("#content").innerHTML = '<div class="msg">Cannot reach the API. Is <code>uvicorn main:app</code> running?</div>'; return; }
+
+  if (p.message) { current=null; $("#content").innerHTML = `<div class="msg">🎉 ${p.message}</div>`; loadStats(); return; }
+  current = p;
+  N = (p.boxes || []).length;
+  k = N;            // default assumption: every model box is correct — reviewer adjusts
+  boxOff = false;
+  touched = false;
+
+  const boxes = (p.boxes||[]).map(b =>
+    `<div class="box" data-x="${b.x}" data-y="${b.y}" data-w="${b.width}" data-h="${b.height}">
+       <span>${b.conf!=null ? (b.conf*100).toFixed(0)+'%' : ''}</span></div>`).join("");
+  $("#content").innerHTML = `
+    <div class="stage" id="stage">
+      <img id="frame" src="${p.image_url}" alt="frame">
+      ${boxes}
+    </div>
+    <div class="meta">
+      <span class="pill">${p.filename}</span>
+      <span class="pill">band: <b>${p.bucket}</b></span>
+      <span class="pill">max conf: <b>${(p.max_conf*100).toFixed(0)}%</b></span>
+      <span class="pill">${N} model box(es)</span>
+    </div>`;
+
+  const img = $("#frame");
+  img.onload = positionBoxes;
+  if (img.complete) positionBoxes();
+  ["verdicts","counts","toolbar","nextbar"].forEach(id => $("#"+id).hidden = false);
+  $("#notes").hidden = false;
+  $("#notes").value = "";
+  $("#boxoff").checked = false;
+  enableDrawing();
+  renderCounts();
+  loadStats();
+}
+
+// Model boxes are in ORIGINAL px; scale to the displayed image.
+function positionBoxes() {
+  const img = $("#frame");
+  const sx = img.clientWidth / img.naturalWidth, sy = img.clientHeight / img.naturalHeight;
+  document.querySelectorAll(".box").forEach(el => {
+    el.style.left=(el.dataset.x*sx)+"px"; el.style.top=(el.dataset.y*sy)+"px";
+    el.style.width=(el.dataset.w*sx)+"px"; el.style.height=(el.dataset.h*sy)+"px";
+  });
+  renderDrawn();
+}
+window.addEventListener("resize", positionBoxes);
+
+// ── Counts ─────────────────────────────────────────────────────────────────────
+function renderCounts() {
+  k = Math.max(0, Math.min(k, N));
+  $("#nBoxes").textContent = N;
+  $("#kVal").textContent = k;
+  $("#fVal").textContent = N - k;          // false alarms = model boxes not marked correct
+  $("#mVal").textContent = drawn.length;   // missed = boxes you drew
+  $("#kMinus").disabled = (k <= 0);
+  $("#kPlus").disabled = (k >= N);
+  $("#next").disabled = !touched;
+}
+function setK(v) { k = v; touched = true; clearSelection(); renderCounts(); }
+$("#kMinus").onclick = () => setK(k - 1);
+$("#kPlus").onclick  = () => setK(k + 1);
+$("#boxoff").onchange = e => { boxOff = e.target.checked; touched = true; renderCounts(); };
+
+// ── Quick-shortcut presets (fill the counts, then you press Next) ───────────────
+function clearSelection() { document.querySelectorAll("button.v").forEach(b => b.classList.remove("selected")); }
+function preset(name, btn) {
+  touched = true;
+  boxOff = false; $("#boxoff").checked = false;
+  if (name === "correct")            { k = N; }
+  else if (name === "false_alarm")   { k = 0; }
+  else if (name === "correctly_empty"){ k = 0; clearDrawn(); }
+  else if (name === "box_off")       { k = N; boxOff = true; $("#boxoff").checked = true; }
+  else if (name === "missed")        { k = 0; }   // draw the missed otter(s); counts as FN via drawn boxes
+  clearSelection();
+  if (btn) btn.classList.add("selected");
+  renderCounts();
+}
+document.querySelectorAll("button.v").forEach(b => b.onclick = () => preset(b.dataset.preset, b));
+
+// ── Draw your own boxes (missed otters) ─────────────────────────────────────────
+function scaleFactors() { const img=$("#frame"); return { sx: img.naturalWidth/img.clientWidth, sy: img.naturalHeight/img.clientHeight }; }
+function clearDrawn() { drawn = []; document.querySelectorAll(".drawbox").forEach(e=>e.remove()); if($("#drawnCount")) $("#drawnCount").textContent=""; renderCounts?.(); }
+function renderDrawn() {
+  document.querySelectorAll(".drawbox.saved").forEach(e=>e.remove());
+  const { sx, sy } = scaleFactors(); const stage = $("#stage");
+  drawn.forEach(b => {
+    const el=document.createElement("div"); el.className="drawbox saved";
+    el.style.left=(b.x/sx)+"px"; el.style.top=(b.y/sy)+"px";
+    el.style.width=(b.width/sx)+"px"; el.style.height=(b.height/sy)+"px";
+    stage.appendChild(el);
+  });
+  const dc=$("#drawnCount"); if(dc) dc.textContent = drawn.length ? `${drawn.length} drawn` : "";
+}
+function enableDrawing() {
+  const stage=$("#stage"), img=$("#frame");
+  if(!stage) return;
+  stage.onmousedown = e => {
+    const r=img.getBoundingClientRect();
+    const x=Math.max(0,Math.min(e.clientX-r.left,r.width)), y=Math.max(0,Math.min(e.clientY-r.top,r.height));
+    const el=document.createElement("div"); el.className="drawbox active"; stage.appendChild(el);
+    drag={x0:x,y0:y,el,cur:null}; e.preventDefault();
+  };
+}
+document.addEventListener("mousemove", e => {
+  if(!drag) return;
+  const r=$("#frame").getBoundingClientRect();
+  const x=Math.max(0,Math.min(e.clientX-r.left,r.width)), y=Math.max(0,Math.min(e.clientY-r.top,r.height));
+  const left=Math.min(x,drag.x0), top=Math.min(y,drag.y0), w=Math.abs(x-drag.x0), h=Math.abs(y-drag.y0);
+  Object.assign(drag.el.style,{left:left+"px",top:top+"px",width:w+"px",height:h+"px"});
+  drag.cur={left,top,w,h};
+});
+document.addEventListener("mouseup", () => {
+  if(!drag) return;
+  const c=drag.cur; drag.el.remove();
+  if(c && c.w>=5 && c.h>=5){
+    const {sx,sy}=scaleFactors();
+    drawn.push({x:Math.round(c.left*sx),y:Math.round(c.top*sy),width:Math.round(c.w*sx),height:Math.round(c.h*sy)});
+    touched = true; renderDrawn(); renderCounts();
+  }
+  drag=null;
+});
+$("#clearBoxes").onclick = () => { clearDrawn(); touched = true; renderCounts(); };
+
+// ── Commit + advance ────────────────────────────────────────────────────────────
+async function commit() {
+  if (!current || !touched) return;
+  let res;
+  try {
+    res = await fetch(api()+"/eval/feedback", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({
+        prediction_id: current.id,
+        n_boxes: N, n_correct: k, box_off: boxOff,
+        corrected_boxes: drawn,
+        reviewed_by: $("#reviewer").value || "anon",
+        notes: $("#notes").value || null,
+      }),
+    });
+  } catch { toast("⚠ can't reach API — is uvicorn running?"); return; }
+  if (!res.ok) { toast(`⚠ save failed (${res.status}) — not recorded`); return; }
+  const r = await res.json();
+  toast("saved: " + (r.verdict || "ok"));
+  loadNext();
+}
+$("#next").onclick = commit;
+
+document.addEventListener("keydown", e => {
+  if (e.target.tagName === "INPUT") return;          // don't hijack the name/notes fields
+  if (e.key === "u" || e.key === "U") { e.preventDefault(); $("#clearBoxes").click(); return; }
+  if (e.key === "Enter") { e.preventDefault(); commit(); return; }
+  if (e.key === "ArrowUp")   { e.preventDefault(); setK(k+1); return; }
+  if (e.key === "ArrowDown") { e.preventDefault(); setK(k-1); return; }
+  const P = {"1":"correct","2":"missed","3":"false_alarm","4":"box_off","5":"correctly_empty"};
+  if (P[e.key]) { e.preventDefault(); preset(P[e.key], document.querySelector(`button.v[data-preset="${P[e.key]}"]`)); }
+});
+
+// ── Scoreboard ──────────────────────────────────────────────────────────────────
+async function loadStats() {
+  let s; try { s = await (await fetch(api()+"/eval/stats")).json(); } catch { return; }
+  $("#progress").textContent = `${s.model_reviewed}/${s.predictions_total} reviewed · ${s.remaining} left`;
+  const b = s.boxes || {tp:0,fp:0,fn:0}, v = s.verdicts || {};
+  const vp = Object.entries(v).map(([k2,n]) => `<span class="pill">${k2}: ${n}</span>`).join(" ");
+  $("#scoreboard").innerHTML = `
+    <table>
+      <tr><td>Precision</td><td class="big">${s.precision ?? "—"}</td>
+          <td>Recall</td><td class="big">${s.recall ?? "—"}</td></tr>
+    </table>
+    <div class="meta" style="margin-top:8px">
+      <span class="pill tp">TP boxes: ${b.tp}</span>
+      <span class="pill fp">FP boxes: ${b.fp}</span>
+      <span class="pill fn">FN (missed): ${b.fn}</span>
+      <span class="pill">box-off frames: ${s.box_off_frames ?? 0}</span>
+    </div>
+    <div class="meta" style="margin-top:4px">${vp}</div>`;
+}
+
+loadNext();
+</script>
+</body>
+</html>
