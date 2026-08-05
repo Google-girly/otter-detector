@@ -114,4 +114,117 @@ def get_images(_=Depends(require_admin)):
     return response.data
 
 
+# ── Model evaluation (see db/eval_schema.sql + review.html) ──────────────────────
+# These power the standalone review page where a human scores otter_v2's
+# predictions. Kept separate from the labeling routes above so evaluation never
+# touches the crowd training labels.
+
+VALID_VERDICTS = {"correct", "missed", "false_alarm", "box_off", "correctly_empty"}
+
+
+def _public_url(storage_path: str) -> str:
+    """storage_path is 'frames/eval/<name>' -> public URL to the image."""
+    return f"{os.getenv('SUPABASE_URL')}/storage/v1/object/public/{storage_path}"
+
+
+@router.get("/eval/next")
+def eval_next():
+    """Return the next prediction that has no feedback row yet (i.e. unreviewed)."""
+    reviewed = supabase.table("eval_feedback").select("prediction_id").execute()
+    reviewed_ids = {r["prediction_id"] for r in reviewed.data}
+
+    # Pull a batch ordered oldest-first and return the first unreviewed one.
+    preds = supabase.table("eval_predictions").select("*").order("created_at").limit(500).execute()
+    for p in preds.data:
+        if p["id"] not in reviewed_ids:
+            p["image_url"] = _public_url(p["storage_path"])
+            return p
+    return {"message": "All predictions reviewed!"}
+
+
+def _derive_verdict(n_boxes: int, n_correct: int, n_false: int, n_missed: int) -> str:
+    """Collapse the per-frame counts into one readable label ('mixed' when a
+    frame has more than one kind of outcome)."""
+    if n_boxes == 0 and n_missed == 0:
+        return "correctly_empty"
+    if n_correct > 0 and n_false == 0 and n_missed == 0:
+        return "correct"
+    if n_correct == 0 and n_false > 0 and n_missed == 0:
+        return "false_alarm"
+    if n_correct == 0 and n_false == 0 and n_missed > 0:
+        return "missed"
+    return "mixed"
+
+
+@router.post("/eval/feedback")
+def eval_feedback(payload: dict):
+    """Record one human verdict on a prediction, as per-frame detection counts.
+
+    The client sends how many of the model's boxes were correct plus the boxes
+    the human drew for missed otters; everything else is derived here so the math
+    stays in one place.
+    """
+    corrected = payload.get("corrected_boxes") or []
+    n_boxes = int(payload.get("n_boxes", 0))
+    n_correct = max(0, min(int(payload.get("n_correct", 0)), n_boxes))
+    n_false = n_boxes - n_correct
+    n_missed = len(corrected)
+    box_off = bool(payload.get("box_off", False))
+    verdict = _derive_verdict(n_boxes, n_correct, n_false, n_missed)
+
+    supabase.table("eval_feedback").insert({
+        "prediction_id": payload["prediction_id"],
+        "verdict": verdict,
+        "reviewed_by": payload.get("reviewed_by") or "anon",
+        "notes": payload.get("notes") or None,
+        "corrected_boxes": corrected,   # boxes the human drew, original px coords
+        "n_boxes": n_boxes,
+        "n_correct": n_correct,
+        "n_false": n_false,
+        "n_missed": n_missed,
+        "box_off": box_off,
+    }).execute()
+    return {"message": "Verdict saved!", "verdict": verdict}
+
+
+@router.get("/eval/stats")
+def eval_stats():
+    """Live scoreboard: verdict counts + precision/recall for the write-up.
+
+    Frame-level definitions:
+      correct/box_off  -> otter present AND detected  (True Positive)
+      missed           -> otter present, not detected (False Negative)
+      false_alarm      -> detected but no otter       (False Positive)
+      correctly_empty  -> no otter, nothing detected  (True Negative)
+    """
+    total_preds = supabase.table("eval_predictions").select("id", count="exact").execute().count or 0
+    fb = supabase.table("eval_feedback").select("verdict, n_correct, n_false, n_missed, box_off").execute().data
+
+    # Box-level totals -> exact precision/recall, even on multi-otter frames.
+    tp = sum(r.get("n_correct") or 0 for r in fb)   # boxes correctly on an otter
+    fp = sum(r.get("n_false") or 0 for r in fb)     # boxes on a non-otter
+    fn = sum(r.get("n_missed") or 0 for r in fb)    # otters with no box
+    box_off_frames = sum(1 for r in fb if r.get("box_off"))
+
+    precision = tp / (tp + fp) if (tp + fp) else None
+    recall = tp / (tp + fn) if (tp + fn) else None
+
+    # Frame-level verdict tally (readable breakdown for the writeup).
+    verdicts = {}
+    for r in fb:
+        verdicts[r["verdict"]] = verdicts.get(r["verdict"], 0) + 1
+
+    reviewed = len(fb)
+    return {
+        "model_reviewed": reviewed,
+        "predictions_total": total_preds,
+        "remaining": max(total_preds - reviewed, 0),
+        "boxes": {"tp": tp, "fp": fp, "fn": fn},
+        "verdicts": verdicts,
+        "box_off_frames": box_off_frames,
+        "precision": round(precision, 3) if precision is not None else None,
+        "recall": round(recall, 3) if recall is not None else None,
+    }
+
+
 app.include_router(router)
