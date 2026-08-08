@@ -153,10 +153,38 @@ Sanity checks: after 7pm the instance should show `stopped` in the EC2 console
 (you're not billed for stopped compute); a couple minutes after 6:55am it should
 be `running` and `journalctl -u otter-recorder -f` should show clips again.
 
+## Local mode (no AWS at all)
+
+`S3_BUCKET` is optional. Leave it unset and the recorder runs in **local mode**:
+clips are written to `WORK_DIR` and kept on disk instead of being uploaded and
+deleted. Add `PREVIEW=1` for a live window showing the frame, the motion mask,
+and the current `motion_px` reading — the fastest way to tune sensitivity.
+
+```sh
+# from your laptop, using the repo venv — NOT the instance venv
+PREVIEW=1 WORK_DIR=./test-clips ../.venv/bin/python motion_recorder.py   # 'q' quits
+```
+
+Run this on your laptop, not the instance. `requirements-ec2.txt` pins
+`opencv-python-headless`, which has no `imshow` — `PREVIEW=1` against the
+instance venv raises instead of opening a window. The repo's root
+`requirements.txt` installs the full `opencv-python`, which does have it.
+
+Note that `FPS` defaults to 15 in the script but the systemd unit overrides it to
+10, which is what actually runs in production.
+
 ## Tuning (all via env vars — see the CONFIG block in the script)
 
 | Var | Default | What it does |
 |-----|---------|--------------|
+| `YOUTUBE_URL` | the main otter cam | Which stream to record. The after-hours cam URL is noted in the script. |
+| `S3_BUCKET` | *(unset)* | Upload target. **Unset = local mode**, clips stay in `WORK_DIR`. |
+| `S3_PREFIX` | `clips` | Key prefix inside the bucket. |
+| `AWS_REGION` | `us-east-2` | |
+| `COOKIES_FILE` | *(unset)* | Path to a Netscape-format `cookies.txt` from a browser logged into YouTube. **Required on EC2** — datacenter IPs get the "confirm you're not a bot" gate. Unnecessary from home. |
+| `WORK_DIR` | `/tmp/otter-clips` | Where clips are written before upload. |
+| `PREVIEW` | `0` | `1` opens the live preview + motion-mask windows (local only). |
+| `WARMUP_FRAMES` | `FPS × 5` | Frames to ignore while MOG2 learns the background. |
 | `MOTION_AREA_FRAC` | `0.012` | Fraction of the frame that must change to count as motion. **Raise it** if water ripples trigger recording; lower it to catch smaller movement. |
 | `VAR_THRESHOLD` | `40` | MOG2 sensitivity. Higher = less sensitive. |
 | `PREROLL_SECONDS` | `3` | Seconds kept *before* motion started (so clips don't start mid-action). |
@@ -189,4 +217,9 @@ to `clips/YYYY/MM/DD/` matching that name. Two clips in the same minute get a
   `CRF` and CPU cost with `ENCODER_PRESET`.
 - **Cost ballpark:** `t3.small` on-demand ≈ $15/mo + S3 storage/egress. Use a
   spot instance or stop it overnight to cut that further.
-```
+
+## What happens to the clips
+
+[`../auto-labeling`](../auto-labeling) picks them up from S3 — cutting them into
+frames, running the model, and routing each frame to a training set or a human.
+See [`../docs/PIPELINE.md`](../docs/PIPELINE.md) for the full loop.

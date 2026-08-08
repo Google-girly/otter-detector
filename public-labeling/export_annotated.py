@@ -8,8 +8,10 @@ scrolling through the model's behavior or dropping figures into the model-2 writ
 
 On each frame:
   • model's predicted boxes  — drawn in the VERDICT color (so the color tells you
-    how you judged the frame), labeled with confidence.
-  • your drawn correction boxes (missed otters) — solid CYAN, labeled "you".
+    how you judged the frame), labeled with confidence + pixel coords
+    ("89% 412,233 88x64" = top-left x,y then width x height). --no-coords drops
+    the coords.
+  • your drawn correction boxes (missed otters) — solid CYAN, labeled "you" + coords.
   • a header strip with the verdict + counts (TP/FP/FN) + filename.
 
 Output:
@@ -20,6 +22,7 @@ Run from public-labeling/:
   ../.venv/bin/python export_annotated.py
 """
 
+import argparse
 import io
 import os
 from pathlib import Path
@@ -58,16 +61,33 @@ def _font(size):
         return ImageFont.load_default()
 
 
-def _draw_box(draw, b, color, width, label, font):
+def _coord_text(b):
+    """x,y of the top-left corner plus w×h, rounded to whole pixels."""
+    return (f"{round(b['x'])},{round(b['y'])} "
+            f"{round(b['width'])}x{round(b['height'])}")
+
+
+def _draw_box(draw, b, color, width, label, font, img_w, coords=True):
     x, y, w, h = b["x"], b["y"], b["width"], b["height"]
     draw.rectangle([x, y, x + w, y + h], outline=color, width=width)
+    if coords:
+        label = f"{label} {_coord_text(b)}".strip()
     if label:
         tw = draw.textlength(label, font=font)
-        draw.rectangle([x, y - 16, x + tw + 6, y], fill=color)
-        draw.text((x + 3, y - 15), label, fill=(10, 20, 28), font=font)
+        # keep the label strip inside the frame — coords make it wide enough to
+        # run off the right edge / above the top on boxes near a border
+        lx = max(0, min(x, img_w - tw - 7))
+        ly = y if y >= 16 else y + h + 16
+        draw.rectangle([lx, ly - 16, lx + tw + 6, ly], fill=color)
+        draw.text((lx + 3, ly - 15), label, fill=(10, 20, 28), font=font)
 
 
 def main():
+    ap = argparse.ArgumentParser(description="Export annotated eval frames.")
+    ap.add_argument("--no-coords", dest="coords", action="store_false",
+                    help="omit the x,y w x h text from box labels")
+    args = ap.parse_args()
+
     preds = supabase.table("eval_predictions").select("*").limit(10000).execute().data
     fb_rows = supabase.table("eval_feedback").select("*").limit(10000).execute().data
     fb = {r["prediction_id"]: r for r in fb_rows}
@@ -95,12 +115,14 @@ def main():
         # model's predicted boxes, in the verdict color
         for b in (p.get("boxes") or []):
             conf = b.get("conf")
-            _draw_box(draw, b, color, 2, f"{conf*100:.0f}%" if conf is not None else "", font)
+            _draw_box(draw, b, color, 2,
+                      f"{conf*100:.0f}%" if conf is not None else "",
+                      font, img.width, args.coords)
 
         # your correction boxes (missed otters), in cyan
         if review:
             for b in (review.get("corrected_boxes") or []):
-                _draw_box(draw, b, CORRECTION_COLOR, 3, "you", font)
+                _draw_box(draw, b, CORRECTION_COLOR, 3, "you", font, img.width, args.coords)
 
         # header strip: verdict + counts + filename
         if review:

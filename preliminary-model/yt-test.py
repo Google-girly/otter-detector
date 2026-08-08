@@ -1,6 +1,7 @@
 import yt_dlp
 import cv2
 from ultralytics import YOLO
+from ultralytics.utils.plotting import colors  # same palette plot() uses, so tags match the box
 
 model = YOLO("../models/otter_v1.pt")
 
@@ -56,6 +57,21 @@ while True:
 
 
     new_frame = results[0].plot()  # get the first result and plot the detections on the frame
+
+    # coord tag hanging off each box: filled in the box's own color, white text.
+    # shows the top-left corner of the box. ultralytics puts its conf label above
+    # the box, so this goes below.
+    boxes = results[0].boxes
+    if boxes is not None:
+        for xyxy, cls in zip(boxes.xyxy, boxes.cls):
+            x1, y1, x2, y2 = (int(v) for v in xyxy)
+            color = colors(int(cls), True)  # True = BGR, matching the drawn box
+            text = f"x:{x1} y:{y1}"
+            (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
+            tx = max(0, min(x1, new_frame.shape[1] - tw - 10))          # pull left if it'd clip off the right edge
+            ty = y2 if y2 + th + 10 < new_frame.shape[0] else max(0, y2 - th - 10)  # tuck inside if the box hugs the bottom
+            cv2.rectangle(new_frame, (tx, ty), (tx + tw + 10, ty + th + 10), color, -1)
+            cv2.putText(new_frame, text, (tx + 5, ty + th + 4), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
 
     cv2.imshow('Otter Cam 1', new_frame)  # display the frame in a window
     # cv2.imshow('Otter Cam', frame)  # display the original frame in a window
