@@ -47,6 +47,8 @@ def main():
     ap.add_argument("--out", default="annotated_v1", help="output folder")
     ap.add_argument("--conf", type=float, default=0.25,
                     help="confidence threshold (match the v2 eval's 0.25 for a fair compare)")
+    ap.add_argument("--no-coords", dest="coords", action="store_false",
+                    help="omit the x,y w x h text from box labels")
     args = ap.parse_args()
 
     model_name = Path(args.model).stem
@@ -79,9 +81,15 @@ def main():
                 x1, y1, x2, y2 = (float(v) for v in xyxy)
                 draw.rectangle([x1, y1, x2, y2], outline=BOX_COLOR, width=2)
                 label = f"{float(conf)*100:.0f}%"
+                if args.coords:
+                    label += f" {round(x1)},{round(y1)} {round(x2-x1)}x{round(y2-y1)}"
                 tw = draw.textlength(label, font=font)
-                draw.rectangle([x1, y1 - 16, x1 + tw + 6, y1], fill=BOX_COLOR)
-                draw.text((x1 + 3, y1 - 15), label, fill=(10, 20, 28), font=font)
+                # keep the label strip inside the frame — coords make it wide
+                # enough to run off the right edge / above the top
+                lx = max(0, min(x1, img.width - tw - 7))
+                ly = y1 if y1 >= 16 else y2 + 16
+                draw.rectangle([lx, ly - 16, lx + tw + 6, ly], fill=BOX_COLOR)
+                draw.text((lx + 3, ly - 15), label, fill=(10, 20, 28), font=font)
                 n += 1
         total_boxes += n
 

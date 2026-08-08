@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clip Review — v1 vs v2</title>
+<style>
+  :root { --bg:#0f1720; --card:#18232f; --line:#2a3a4a; --fg:#e7eef5; --muted:#8fa6b8; --accent:#3aa0ff; --good:#35e07f; --bad:#ff4d4d; --warn:#ffb454; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.5 system-ui, sans-serif; background:var(--bg); color:var(--fg); }
+  header { padding:10px 16px; border-bottom:1px solid var(--line); display:flex; gap:14px; align-items:center; flex-wrap:wrap; position:sticky; top:0; background:var(--bg); z-index:5; }
+  header h1 { font-size:15px; margin:0; white-space:nowrap; }
+  .pill { background:var(--card); border:1px solid var(--line); border-radius:999px; padding:2px 10px; font-size:13px; }
+  .who { margin-left:auto; display:flex; gap:8px; align-items:center; }
+  input[type=text], input.notes { background:var(--card); border:1px solid var(--line); color:var(--fg); border-radius:6px; padding:6px 9px; font:inherit; }
+  button { background:var(--card); border:1px solid var(--line); color:var(--fg); border-radius:6px; padding:5px 10px; cursor:pointer; font:inherit; }
+  button:hover:not(:disabled) { border-color:var(--accent); }
+  button:disabled { opacity:.35; cursor:not-allowed; }
+  select { background:var(--card); border:1px solid var(--line); color:var(--fg); border-radius:6px; padding:5px 8px; font:inherit; }
+
+  main { padding:14px 16px 40px; }
+  .panels { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  @media (max-width:1100px) { .panels { grid-template-columns:1fr; } }
+  .panel { background:var(--card); border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+  .panel.done { border-color:var(--good); }
+  .phead { padding:8px 12px; border-bottom:1px solid var(--line); display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .phead b { font-size:15px; }
+  .stage { position:relative; background:#000; line-height:0; }
+  .stage img { display:block; width:100%; height:auto; user-select:none; -webkit-user-drag:none; }
+  .stage .cleantag { position:absolute; top:6px; right:8px; background:var(--warn); color:#04121f; font-size:11px; font-weight:700; padding:2px 7px; border-radius:4px; line-height:1.6; }
+  .pbody { padding:10px 12px 12px; }
+  .row { display:flex; gap:14px; align-items:center; flex-wrap:wrap; margin:6px 0; font-size:14px; }
+  .step { display:inline-flex; align-items:center; gap:6px; }
+  .step button { width:28px; height:28px; padding:0; font-size:17px; line-height:1; }
+  .step .val { min-width:20px; text-align:center; font-size:16px; font-weight:700; }
+  .tp { color:var(--good); } .fp { color:var(--bad); } .fn { color:var(--warn); }
+  label.chk { display:flex; gap:6px; align-items:center; color:var(--muted); font-size:13px; }
+  .quick { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+  .quick button { font-size:13px; }
+  .quick kbd, .keys kbd { background:#0c141c; border:1px solid var(--line); border-radius:4px; padding:0 5px; font-size:11px; }
+
+  .navbar { display:flex; gap:10px; align-items:center; margin:14px 0 6px; flex-wrap:wrap; }
+  #slider { flex:1; min-width:220px; accent-color:var(--accent); }
+  #next { border-color:var(--accent); background:var(--accent); color:#04121f; font-weight:700; }
+  .keys { color:var(--muted); font-size:12.5px; margin:4px 0 0; }
+
+  .board { margin-top:20px; border-top:1px solid var(--line); padding-top:14px; }
+  table.sc { border-collapse:collapse; font-size:14px; }
+  table.sc th, table.sc td { padding:5px 16px 5px 0; text-align:left; }
+  table.sc th { color:var(--muted); font-weight:500; }
+  .big { font-size:19px; font-weight:700; }
+  .msg { padding:40px; text-align:center; color:var(--muted); }
+  .toast { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:var(--accent); color:#04121f; padding:8px 16px; border-radius:8px; opacity:0; transition:opacity .2s; font-weight:600; pointer-events:none; }
+  .toast.show { opacity:1; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🦦 clip review</h1>
+  <span class="pill" id="clipname">—</span>
+  <span class="pill" id="progress">—</span>
+  <span class="pill" id="frameinfo">—</span>
+  <div class="who">
+    <label>stride <select id="stride">
+      <option value="1">every frame</option>
+      <option value="2">every 2nd</option>
+      <option value="5" selected>every 5th</option>
+      <option value="10">every 10th</option>
+    </select></label>
+    <label>you <input type="text" id="reviewer" placeholder="your name" size="10"></label>
+    <button id="export">Export</button>
+    <button id="reset">Reset</button>
+  </div>
+</header>
+
+<main>
+  <div id="content"><div class="msg">Loading manifest…</div></div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+let M = null;            // manifest
+let idx = 0;             // current frame index
+let stride = 5;
+let clean = false;       // showing clean (unannotated) frames?
+let scores = {};         // key `${frame}|${model}` -> {n, k, missed, box_off}
+let KEY = "clipreview";
+
+function toast(t) { const el=$("#toast"); el.textContent=t; el.classList.add("show"); setTimeout(()=>el.classList.remove("show"),1200); }
+const pad = n => String(n).padStart(4, "0");
+const skey = (f, m) => `${f}|${m}`;
+
+function load() { try { scores = JSON.parse(localStorage.getItem(KEY)) || {}; } catch { scores = {}; } }
+function save() { localStorage.setItem(KEY, JSON.stringify(scores)); }
+
+// ── frames in the current stride ────────────────────────────────────────────────
+function frameList() {
+  const out = [];
+  for (let i = 0; i < M.n_frames; i += stride) out.push(i);
+  return out;
+}
+function scoredCount() {
+  return frameList().filter(f => M.models.every(m => scores[skey(f, m.name)])).length;
+}
+
+// ── render ─────────────────────────────────────────────────────────────────────
+function render() {
+  const secs = (idx / (M.fps || 15));
+  $("#clipname").textContent = M.clip;
+  $("#frameinfo").textContent = `frame ${idx} / ${M.n_frames - 1}  ·  ${secs.toFixed(1)}s` + (clean ? "  ·  CLEAN" : "");
+  const fl = frameList();
+  $("#progress").textContent = `${scoredCount()}/${fl.length} frames scored (stride ${stride})`;
+
+  $("#content").innerHTML = `
+    <div class="panels">${M.models.map((m, i) => panelHTML(m, i)).join("")}</div>
+    <div class="navbar">
+      <button id="prev">← prev</button>
+      <input type="range" id="slider" min="0" max="${M.n_frames - 1}" step="${stride}" value="${idx}">
+      <button id="next">next (→)</button>
+      <button id="cleanBtn">${clean ? "show boxes (x)" : "show clean frame (x)"}</button>
+      <button id="jumpUnscored">jump to next unscored</button>
+    </div>
+    <div class="keys">
+      <kbd>1</kbd> accept both (all boxes right, none missed) &nbsp;·&nbsp;
+      <kbd>0</kbd> both wrong (all boxes false) &nbsp;·&nbsp;
+      left: <kbd>q</kbd>/<kbd>w</kbd> correct −/+, <kbd>e</kbd>/<kbd>r</kbd> missed +/− &nbsp;·&nbsp;
+      right: <kbd>u</kbd>/<kbd>i</kbd> correct −/+, <kbd>o</kbd>/<kbd>p</kbd> missed +/− &nbsp;·&nbsp;
+      <kbd>x</kbd> clean &nbsp;·&nbsp; <kbd>←</kbd>/<kbd>→</kbd> frames
+    </div>
+    ${boardHTML()}`;
+  wire();
+}
+
+function panelHTML(m, i) {
+  const boxes = m.boxes[idx] || [];
+  const n = boxes.length;
+  const s = scores[skey(idx, m.name)];
+  const k = s ? s.k : n;
+  const missed = s ? s.missed : 0;
+  const src = clean ? `raw/${pad(idx)}.jpg` : `${m.dir}/${pad(idx)}.jpg`;
+  const confs = boxes.map(b => (b.conf * 100).toFixed(0) + "%").join(", ") || "—";
+  return `
+    <div class="panel ${s ? "done" : ""}" data-model="${m.name}">
+      <div class="phead">
+        <b>${m.name}</b>
+        <span class="pill">${n} box(es)</span>
+        <span class="pill">conf: ${confs}</span>
+        ${s ? '<span class="pill tp">scored</span>' : ""}
+      </div>
+      <div class="stage">
+        <img src="${src}" alt="${m.name} frame ${idx}">
+        ${clean ? '<span class="cleantag">CLEAN — no boxes drawn</span>' : ""}
+      </div>
+      <div class="pbody">
+        <div class="row">
+          <span class="tp">Correct boxes</span>
+          <span class="step">
+            <button data-act="k-" data-m="${m.name}" ${k <= 0 ? "disabled" : ""}>−</button>
+            <span class="val tp">${k}</span>
+            <button data-act="k+" data-m="${m.name}" ${k >= n ? "disabled" : ""}>+</button>
+          </span>
+          <span class="fp">False alarms: <b>${n - k}</b></span>
+        </div>
+        <div class="row">
+          <span class="fn">Missed otters</span>
+          <span class="step">
+            <button data-act="m-" data-m="${m.name}" ${missed <= 0 ? "disabled" : ""}>−</button>
+            <span class="val fn">${missed}</span>
+            <button data-act="m+" data-m="${m.name}">+</button>
+          </span>
+          <label class="chk"><input type="checkbox" data-act="off" data-m="${m.name}" ${s && s.box_off ? "checked" : ""}> box off (right otter, sloppy box)</label>
+        </div>
+        <div class="quick">
+          <button data-act="all" data-m="${m.name}">✅ all ${n} correct</button>
+          <button data-act="none" data-m="${m.name}">❌ all false</button>
+          <button data-act="empty" data-m="${m.name}">⬜ nothing there (correctly empty)</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+// ── scoring ────────────────────────────────────────────────────────────────────
+function get(model) {
+  const n = (M.byName[model].boxes[idx] || []).length;
+  const k = skey(idx, model);
+  if (!scores[k]) scores[k] = { n, k: n, missed: 0, box_off: false };
+  scores[k].n = n;                        // keep n authoritative from the manifest
+  return scores[k];
+}
+function bump(model, field, d, max) {
+  const s = get(model);
+  s[field] = Math.max(0, max == null ? s[field] + d : Math.min(max, s[field] + d));
+  s.by = $("#reviewer").value || "anon";
+  save(); render();
+}
+function setAll(model, mode) {
+  const s = get(model);
+  if (mode === "all")   { s.k = s.n; s.missed = 0; }
+  if (mode === "none")  { s.k = 0; }
+  if (mode === "empty") { s.k = 0; s.missed = 0; }
+  s.by = $("#reviewer").value || "anon";
+  save(); render();
+}
+function acceptAll(mode) { M.models.forEach(m => setAll(m.name, mode)); }
+
+function wire() {
+  $("#prev").onclick = () => { idx = Math.max(0, idx - stride); render(); };
+  $("#next").onclick = () => { idx = Math.min(M.n_frames - 1, idx + stride); render(); };
+  $("#slider").oninput = e => { idx = +e.target.value; render(); };
+  $("#cleanBtn").onclick = () => { clean = !clean; render(); };
+  $("#jumpUnscored").onclick = jumpUnscored;
+
+  document.querySelectorAll("[data-act]").forEach(el => {
+    const m = el.dataset.m, a = el.dataset.act;
+    if (a === "off") { el.onchange = e => { const s = get(m); s.box_off = e.target.checked; save(); render(); }; return; }
+    el.onclick = () => {
+      if (a === "k+") bump(m, "k", +1, (M.byName[m].boxes[idx] || []).length);
+      else if (a === "k-") bump(m, "k", -1);
+      else if (a === "m+") bump(m, "missed", +1);
+      else if (a === "m-") bump(m, "missed", -1);
+      else setAll(m, a);
+    };
+  });
+}
+
+function jumpUnscored() {
+  const fl = frameList();
+  const next = fl.find(f => f > idx && !M.models.every(m => scores[skey(f, m.name)]))
+            ?? fl.find(f => !M.models.every(m => scores[skey(f, m.name)]));
+  if (next == null) { toast("all scored 🎉"); return; }
+  idx = next; render();
+}
+
+// ── scoreboard ─────────────────────────────────────────────────────────────────
+function tally(model) {
+  let tp = 0, fp = 0, fn = 0, off = 0, frames = 0;
+  Object.entries(scores).forEach(([key, s]) => {
+    const [f, m] = key.split("|");
+    if (m !== model) return;
+    if (+f % stride !== 0) return;                 // only count frames in the current stride
+    frames++; tp += s.k; fp += s.n - s.k; fn += s.missed; off += s.box_off ? 1 : 0;
+  });
+  const prec = tp + fp ? tp / (tp + fp) : null;
+  const rec  = tp + fn ? tp / (tp + fn) : null;
+  const f1 = prec != null && rec != null && prec + rec ? 2 * prec * rec / (prec + rec) : null;
+  return { tp, fp, fn, off, frames, prec, rec, f1 };
+}
+const pctf = v => v == null ? "—" : (v * 100).toFixed(0) + "%";
+
+function boardHTML() {
+  const rows = M.models.map(m => {
+    const t = tally(m.name);
+    return `<tr>
+      <td><b>${m.name}</b></td>
+      <td class="big">${pctf(t.prec)}</td>
+      <td class="big">${pctf(t.rec)}</td>
+      <td class="big">${pctf(t.f1)}</td>
+      <td class="tp">${t.tp}</td><td class="fp">${t.fp}</td><td class="fn">${t.fn}</td>
+      <td>${t.off}</td><td>${t.frames}</td>
+      <td style="color:var(--muted)">${m.total_boxes} boxes on ${m.frames_with_boxes}/${M.n_frames} frames (whole clip)</td>
+    </tr>`;
+  }).join("");
+  return `<div class="board">
+    <table class="sc">
+      <tr><th>model</th><th>precision</th><th>recall</th><th>F1</th>
+          <th>TP</th><th>FP</th><th>FN</th><th>box-off</th><th>frames scored</th><th></th></tr>
+      ${rows}
+    </table>
+    <div class="keys" style="margin-top:8px">Scores are per-box, over the frames you've scored at the current stride. Saved in this browser as you go — Export for the JSON/CSV.</div>
+  </div>`;
+}
+
+// ── export ─────────────────────────────────────────────────────────────────────
+function exportData() {
+  const summary = {};
+  M.models.forEach(m => { summary[m.name] = tally(m.name); });
+  const payload = {
+    clip: M.clip, conf: M.conf, fps: M.fps, n_frames: M.n_frames,
+    stride, reviewer: $("#reviewer").value || "anon",
+    summary,
+    per_frame: Object.entries(scores).map(([key, s]) => {
+      const [f, m] = key.split("|");
+      return { frame: +f, model: m, n_boxes: s.n, n_correct: s.k,
+               false_alarms: s.n - s.k, missed: s.missed, box_off: !!s.box_off };
+    }).sort((a, b) => a.frame - b.frame || a.model.localeCompare(b.model)),
+  };
+  dl(`${M.clip}-human-eval.json`, JSON.stringify(payload, null, 2), "application/json");
+
+  const csv = ["frame,model,n_boxes,n_correct,false_alarms,missed,box_off"]
+    .concat(payload.per_frame.map(r => `${r.frame},${r.model},${r.n_boxes},${r.n_correct},${r.false_alarms},${r.missed},${r.box_off}`))
+    .join("\n");
+  dl(`${M.clip}-human-eval.csv`, csv, "text/csv");
+  toast("exported JSON + CSV");
+}
+function dl(name, body, type) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([body], { type }));
+  a.download = name; a.click(); URL.revokeObjectURL(a.href);
+}
+
+// ── keys ───────────────────────────────────────────────────────────────────────
+document.addEventListener("keydown", e => {
+  if (!M || e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+  const L = M.models[0] && M.models[0].name, R = M.models[1] && M.models[1].name;
+  const nOf = m => (M.byName[m].boxes[idx] || []).length;
+  const K = {
+    "1": () => acceptAll("all"),
+    "0": () => acceptAll("none"),
+    "q": () => L && bump(L, "k", -1),
+    "w": () => L && bump(L, "k", +1, nOf(L)),
+    "e": () => L && bump(L, "missed", +1),
+    "r": () => L && bump(L, "missed", -1),
+    "u": () => R && bump(R, "k", -1),
+    "i": () => R && bump(R, "k", +1, nOf(R)),
+    "o": () => R && bump(R, "missed", +1),
+    "p": () => R && bump(R, "missed", -1),
+    "x": () => { clean = !clean; render(); },
+    "ArrowRight": () => { idx = Math.min(M.n_frames - 1, idx + stride); render(); },
+    "ArrowLeft":  () => { idx = Math.max(0, idx - stride); render(); },
+    "Enter": () => { idx = Math.min(M.n_frames - 1, idx + stride); render(); },
+  };
+  const fn = K[e.key] || K[e.key.toLowerCase()];
+  if (fn) { e.preventDefault(); fn(); }
+});
+
+// ── boot ───────────────────────────────────────────────────────────────────────
+(async function init() {
+  let m;
+  try { m = await (await fetch("manifest.json")).json(); }
+  catch {
+    $("#content").innerHTML = '<div class="msg">Cannot read <code>manifest.json</code>.<br>Serve this folder over http (<code>python3 -m http.server</code>) — opening the file directly won\'t work.</div>';
+    return;
+  }
+  M = m;
+  // each model's annotated frames live in a folder named for the model's v-suffix
+  M.models.forEach(mm => { mm.dir = mm.name.replace(/^otter_/, ""); });
+  M.byName = Object.fromEntries(M.models.map(mm => [mm.name, mm]));
+  KEY = "clipreview:" + M.clip;
+  load();
+  stride = +$("#stride").value;
+  $("#stride").onchange = e => { stride = +e.target.value; idx = Math.round(idx / stride) * stride; render(); };
+  $("#export").onclick = exportData;
+  $("#reset").onclick = () => { if (confirm("Clear all your scores for this clip?")) { scores = {}; save(); render(); } };
+  render();
+})();
+</script>
+</body>
+</html>
