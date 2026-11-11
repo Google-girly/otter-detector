@@ -173,6 +173,28 @@ instance venv raises instead of opening a window. The repo's root
 Note that `FPS` defaults to 15 in the script but the systemd unit overrides it to
 10, which is what actually runs in production.
 
+## Supabase mode (upload clips to Supabase Storage instead of S3)
+
+Set `SUPABASE_URL` + `SUPABASE_SERVICE_KEY` (read automatically from
+`public-labeling/.env`) and leave `S3_BUCKET` unset. Clips go to the private
+`clips` bucket at `YYYY/MM/DD/<name>.mp4`, and each one gets a row in the
+`clips` table. A failed upload keeps the local file instead of deleting it.
+
+One-time setup: run `public-labeling/db/clips_schema.sql` in the Supabase SQL
+editor, then `../.venv/bin/python setup_supabase.py` to create the bucket.
+
+Collect ~2 hours of motion on the **Free tier** (1 GB storage, 50 MB/file) and stop:
+
+```sh
+brew install ffmpeg deno     # yt-dlp needs deno to read YouTube formats
+WIDTH=854 HEIGHT=480 FPS=10 CRF=24 MAX_CLIP_SECONDS=180 TARGET_SECONDS=7200 \
+  caffeinate -i ../.venv/bin/python motion_recorder.py
+```
+
+480p/10fps/CRF 24 measured ≈ 0.5 Mbps → ~470 MB for 2 h, ~12 MB per 3-min clip.
+`TARGET_SECONDS` counts recorded footage, not wall-clock time; Ctrl-C finishes
+the current clip and waits for uploads before exiting.
+
 ## Tuning (all via env vars — see the CONFIG block in the script)
 
 | Var | Default | What it does |
