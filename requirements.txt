@@ -1,6 +1,6 @@
 ultralytics==8.4.60
 opencv-python==4.13.0.92
-yt-dlp==2026.3.17
+yt-dlp[default]==2026.10.26   # [default] pulls yt-dlp-ejs; also needs `deno` on PATH
 supabase
 python-dotenv
 fastapi
