@@ -186,6 +186,27 @@ button:focus-visible {
   padding: 6px 14px;
 }
 
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-logout {
+  padding: 6px 14px;
+  font-size: 13px;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  border-color: var(--line);
+  white-space: nowrap;
+}
+
+.btn-logout:hover {
+  color: var(--ink);
+  border-color: var(--accent);
+}
+
 .me-pill:hover {
   border-color: var(--accent);
   color: var(--ink-2);
@@ -376,6 +397,21 @@ button:focus-visible {
   .header {
     padding-bottom: 10px;
     margin-bottom: 10px;
+  }
+
+  .brand {
+    font-size: 15px;
+    white-space: nowrap;
+  }
+
+  .header-right {
+    gap: 6px;
+  }
+
+  .me-pill,
+  .btn-logout {
+    padding: 5px 10px;
+    font-size: 12px;
   }
 
   .instructions p {
