@@ -1,23 +1,8 @@
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "services": {
-    "api": {
-      "root": ".",
-      "framework": "fastapi",
-      "entrypoint": "main:app"
-    },
-    "labeling-ui": {
-      "root": "labeling-ui",
-      "framework": "vite",
-      "buildCommand": "npm run build",
-      "outputDirectory": "dist",
-      "rewrites": [
-        { "source": "/(.*)", "destination": "/index.html" }
-      ]
-    }
-  },
+  "buildCommand": "cd labeling-ui && npm install && npm run build",
+  "outputDirectory": "labeling-ui/dist",
   "rewrites": [
-    { "source": "/api/(.*)", "destination": { "service": "api" } },
-    { "source": "/(.*)", "destination": { "service": "labeling-ui" } }
+    { "source": "/api/:path*", "destination": "/api/index.py" },
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
