@@ -1,0 +1,7 @@
+# Training/eval data — not needed to build or run the site (keeps the Python function under 225 MB)
+dataset/
+annotated/
+annotated_v1/
+supabase/
+__pycache__/
+*.py[cod]
