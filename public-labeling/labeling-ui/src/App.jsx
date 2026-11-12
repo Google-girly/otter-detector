@@ -203,8 +203,13 @@ function Labeler() {
       <div className="app">
         {header}
         <div className="done-card">
-          <h2>Every image is labeled 🎉</h2>
-          <p>Thank you! New footage is added regularly, so check back soon.</p>
+          <h2>No more pictures 🎉</h2>
+          <p>Every picture has been labeled. Thank you! New footage is added regularly, so check back soon.</p>
+          {me && (
+            <p>
+              You've labeled <b>{me.labels}</b> picture{me.labels === 1 ? "" : "s"} · <b>{me.hours}</b> hour{me.hours === 1 ? "" : "s"} of service
+            </p>
+          )}
           <button className="btn-submit" onClick={() => { setAllDone(false); fetchNextImage(); }}>Check again</button>
         </div>
         {progress}
