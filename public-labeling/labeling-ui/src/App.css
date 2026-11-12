@@ -119,3 +119,198 @@ button:disabled {
   font-size: 15px;
   margin-top: 40px;
 }
+
+/* ── Accounts / progress ─────────────────────────────────────────────────── */
+
+.me-pill {
+  font-size: 13px;
+  font-weight: 400;
+  color: #5a9db5;
+  background: #002333;
+  border: 1px solid #004A5C;
+  border-radius: 20px;
+  padding: 5px 14px;
+}
+
+.me-pill span {
+  color: #00c4e0;
+  font-weight: 600;
+}
+
+.me-pill:hover {
+  border-color: #00c4e0;
+}
+
+.instructions {
+  width: 100%;
+  max-width: 1200px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 12px;
+  font-size: 14px;
+  color: #8fc8da;
+}
+
+.instructions b {
+  color: #d6eef5;
+}
+
+.actions {
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 14px;
+}
+
+.inline-error {
+  color: #f87171;
+  font-size: 14px;
+}
+
+.done-card {
+  margin-top: 60px;
+  text-align: center;
+  color: #8fc8da;
+}
+
+.done-card h2 {
+  color: #d6eef5;
+  font-size: 22px;
+}
+
+.progress-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  justify-content: flex-end;
+  z-index: 50;
+}
+
+.progress-panel {
+  width: min(380px, 100%);
+  height: 100%;
+  overflow-y: auto;
+  box-sizing: border-box;
+  background: #002333;
+  border-left: 1px solid #004A5C;
+  padding: 22px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  color: #8fc8da;
+  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+}
+
+.progress-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.progress-name {
+  font-size: 18px;
+  font-weight: 600;
+  color: #d6eef5;
+}
+
+.progress-email {
+  font-size: 13px;
+  color: #5a9db5;
+  word-break: break-all;
+}
+
+.modal-close {
+  background: none;
+  color: #5a9db5;
+  padding: 4px 8px;
+  font-size: 16px;
+}
+
+.my-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.my-stat {
+  background: #001824;
+  border: 1px solid #004A5C;
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+.my-stat .v {
+  font-size: 26px;
+  font-weight: 700;
+  color: #00c4e0;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.my-stat .k {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: #5a9db5;
+}
+
+.hours-note,
+.muted {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #5a9db5;
+  margin: 0;
+}
+
+.progress-panel h3 {
+  margin: 8px 0 0;
+  font-size: 14px;
+  color: #d6eef5;
+}
+
+.leaderboard {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.leaderboard li {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 7px 10px;
+  border-radius: 7px;
+  font-size: 14px;
+}
+
+.leaderboard li.me {
+  background: rgba(0, 196, 224, 0.12);
+  color: #d6eef5;
+}
+
+.lb-rank {
+  width: 20px;
+  color: #5a9db5;
+  font-variant-numeric: tabular-nums;
+}
+
+.lb-name {
+  flex: 1;
+}
+
+.lb-count {
+  font-weight: 600;
+  color: #00c4e0;
+  font-variant-numeric: tabular-nums;
+}
+
+.signout {
+  margin-top: auto;
+}

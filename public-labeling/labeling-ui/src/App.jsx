@@ -1,13 +1,31 @@
 import { useEffect, useState, useRef } from "react";
 import { Stage, Layer, Image, Rect } from "react-konva";
-import axios from "axios";
+import { supabase, api, frameUrl } from "./supabase";
+import Auth from "./Auth";
+import Progress from "./Progress";
 import "./App.css";
 
-const SUPABASE_URL = "https://ofuqvgfdninllnlhtqij.supabase.co";
-const BACKEND = "";
-const LABELS = ["otter", "not sure"];
-
+// Session gate: signed out -> Auth, signed in -> Labeler.
 export default function App() {
+  const [session, setSession] = useState(undefined); // undefined = still checking
+  const [recovering, setRecovering] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setSession(data.session));
+    const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
+      if (event === "PASSWORD_RECOVERY") setRecovering(true);
+      setSession(s);
+    });
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  if (session === undefined) return <p className="loading">Loading…</p>;
+  if (recovering) return <Auth initialMode="reset" onDone={() => setRecovering(false)} />;
+  if (!session) return <Auth />;
+  return <Labeler key={session.user.id} />;
+}
+
+function Labeler() {
   const [image, setImage] = useState(null);
   const [konvaImage, setKonvaImage] = useState(null);
   const [scale, setScale] = useState(1);
@@ -15,25 +33,47 @@ export default function App() {
   const [drawing, setDrawing] = useState(false);
   const [currentBox, setCurrentBox] = useState(null);
   const [selectedBox, setSelectedBox] = useState(null);
+  const [me, setMe] = useState(null);
+  const [showProgress, setShowProgress] = useState(false);
+  const [allDone, setAllDone] = useState(false);
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const shownAt = useRef(0); // when the current image appeared, for hours tracking
+
+  const refreshMe = () => api.get("/api/me").then((r) => setMe(r.data)).catch(() => {});
 
   const fetchNextImage = async () => {
     setBoxes([]);
     setSelectedBox(null);
-    const res = await axios.get(`${BACKEND}/api/next-image`);
+    setError("");
+    let res;
+    try {
+      res = await api.get("/api/next-image");
+    } catch {
+      setError("Couldn't load the next image. Check your connection and refresh.");
+      return;
+    }
+    if (!res.data.id) {
+      setAllDone(true);
+      setKonvaImage(null);
+      return;
+    }
     setImage(res.data);
 
     const img = new window.Image();
-    img.src = `${SUPABASE_URL}/storage/v1/object/public/frames/${res.data.storage_path}`;
+    img.src = frameUrl(res.data.storage_path);
     img.onload = () => {
       const maxW = window.innerWidth - 40;
-      const maxH = window.innerHeight - 160;
+      const maxH = window.innerHeight - 200;
       setScale(Math.min(maxW / img.width, maxH / img.height, 1));
       setKonvaImage(img);
+      shownAt.current = Date.now();
     };
   };
 
   useEffect(() => {
     fetchNextImage();
+    refreshMe();
   }, []);
 
   // Delete selected box with keyboard
@@ -91,39 +131,75 @@ export default function App() {
     setCurrentBox(null);
   };
 
-  // Submit all boxes to the backend
-  const handleSubmit = async () => {
-    await axios.post(`${BACKEND}/api/submit-label`, {
-      image_id: image.id,
-      boxes: boxes,
-      labeled_by: "",
-    });
+  // Submit boxes (an empty list means "no otters in this frame")
+  const submit = async (boxesToSend) => {
+    setSubmitting(true);
+    try {
+      await api.post("/api/submit-label", {
+        image_id: image.id,
+        boxes: boxesToSend,
+        duration_ms: Date.now() - shownAt.current,
+      });
+      // Optimistic bump so the counter feels instant; /api/me corrects it.
+      setMe((m) => m && { ...m, labels: m.labels + 1, labels_today: m.labels_today + 1 });
+      refreshMe();
+    } catch (err) {
+      // 409 = someone else labeled it first; just move on without credit.
+      if (err.response?.status !== 409) {
+        setError("That label didn't save. Please try again.");
+        setSubmitting(false);
+        return;
+      }
+    }
+    setSubmitting(false);
     fetchNextImage();
   };
 
-  // Submit with no boxes — marks image as labeled with empty annotation
-  const handleNoOtters = async () => {
-    await axios.post(`${BACKEND}/api/submit-label`, {
-      image_id: image.id,
-      boxes: [],
-      labeled_by: "",
-    });
-    fetchNextImage();
-  };
+  const handleSubmit = () => submit(boxes);
+  const handleNoOtters = () => submit([]);
 
-  if (!konvaImage) return <p className="loading">Loading image...</p>;
+  const header = (
+    <div className="header">
+      <h1>Otter Labeling</h1>
+      <button className="me-pill" onClick={() => setShowProgress(true)} title="Your progress">
+        <span>{me ? me.labels : "–"}</span> labeled
+        {me && <> · <span>{me.hours}</span> hrs</>}
+      </button>
+    </div>
+  );
+
+  const progress = showProgress && (
+    <Progress me={me} onClose={() => setShowProgress(false)} onSignOut={() => supabase.auth.signOut()} />
+  );
+
+  if (allDone) {
+    return (
+      <div className="app">
+        {header}
+        <div className="done-card">
+          <h2>Every image is labeled 🎉</h2>
+          <p>Thank you! New footage is added regularly, so check back soon.</p>
+          <button className="btn-submit" onClick={() => { setAllDone(false); fetchNextImage(); }}>Check again</button>
+        </div>
+        {progress}
+      </div>
+    );
+  }
+
+  if (error && !konvaImage) return <div className="app">{header}<p className="loading">{error}</p>{progress}</div>;
+
+  if (!konvaImage) return <div className="app">{header}<p className="loading">Loading image…</p>{progress}</div>;
 
   const stageW = konvaImage.width * scale;
   const stageH = konvaImage.height * scale;
 
   return (
     <div className="app">
-      <div className="header">
-        <h1>Otter Labeling</h1>
-        <div className="box-count">
-          <span>{boxes.length}</span> {boxes.length === 1 ? "box" : "boxes"} drawn
-        </div>
-      </div>
+      {header}
+      <p className="instructions">
+        Drag a box around each otter, then <b>Submit</b>. No otters? Press <b>No Otters</b>.
+        <span className="box-count"><span>{boxes.length}</span> {boxes.length === 1 ? "box" : "boxes"}</span>
+      </p>
 
       <div className="canvas-wrapper">
         <Stage
@@ -177,7 +253,7 @@ export default function App() {
 
 
       <div className="actions">
-        <button className="btn-submit" onClick={handleSubmit} disabled={boxes.length === 0}>
+        <button className="btn-submit" onClick={handleSubmit} disabled={boxes.length === 0 || submitting}>
           Submit Labels
         </button>
         <button
@@ -190,10 +266,12 @@ export default function App() {
         <button className="btn-clear" onClick={() => { setBoxes([]); setSelectedBox(null); }} disabled={boxes.length === 0}>
           Clear All
         </button>
-        <button className="btn-no-otters" onClick={handleNoOtters}>
+        <button className="btn-no-otters" onClick={handleNoOtters} disabled={submitting}>
           No Otters
         </button>
       </div>
+      {error && <p className="inline-error">{error}</p>}
+      {progress}
     </div>
   );
 }
