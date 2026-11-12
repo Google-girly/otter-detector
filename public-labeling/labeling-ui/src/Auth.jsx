@@ -65,22 +65,10 @@ export default function Auth({ initialMode = "signin", onDone }) {
         <div className="auth-brand">🦦 Otter Labeling</div>
         <h1>{titles[mode]}</h1>
         {mode === "signup" && (
-          <p className="auth-sub">
-            Draw boxes around sea otters to help train a detection model. Your account keeps track
-            of how many images you label and your time spent, for community-service hours.
-          </p>
-        )}
-
-        {mode === "signup" && (
           <>
             <label>
               Full name
               <input value={fullName} onChange={(e) => setFullName(e.target.value)} required autoComplete="name" />
-              <span className="hint">Shown on your hours report. The leaderboard only shows your first name and last initial.</span>
-            </label>
-            <label>
-              School or organization <span className="optional">(optional)</span>
-              <input value={organization} onChange={(e) => setOrganization(e.target.value)} autoComplete="organization" />
             </label>
           </>
         )}
