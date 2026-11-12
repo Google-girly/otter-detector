@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 import os
 import random
 import secrets
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 # Load the .env file so we can use SUPABASE_URL and SUPABASE_KEY
@@ -193,10 +193,99 @@ def update_label(image_id: str, payload: dict, _=Depends(require_admin)):
     return {"message": "Label updated!"}
 
 
+LABEL_FIELDS = "boxes, has_otter, duration_ms, created_at, labeled_by, user_id, profiles(full_name, email)"
+
+
+def _label_out(label: dict | None) -> dict | None:
+    if not label:
+        return None
+    prof = label.pop("profiles", None) or {}
+    label["labeler"] = prof.get("full_name") or ("Admin" if label.get("labeled_by") == "admin" else label.get("labeled_by"))
+    label["labeler_email"] = prof.get("email")
+    return label
+
+
 @router.get("/admin/images")
-def get_images(_=Depends(require_admin)):
-    response = supabase.table("images").select("id, filename, storage_path, is_labeled, created_at, labels(boxes)").order("created_at", desc=True).execute()
-    return response.data
+def get_images(
+    filter: str = "labeled",  # labeled | otters | empty | unlabeled | all
+    user_id: str | None = None,
+    page: int = 0,
+    page_size: int = 48,
+    _=Depends(require_admin),
+):
+    """One page of images, newest activity first. Labeled views come from the
+    labels table (so they sort by when they were labeled and know who did it)."""
+    page_size = max(1, min(page_size, 120))
+    lo, hi = page * page_size, page * page_size + page_size - 1
+
+    if filter in ("labeled", "otters", "empty") or user_id:
+        q = supabase.table("labels").select(
+            f"{LABEL_FIELDS}, images!inner(id, filename, storage_path, is_labeled, created_at)", count="exact"
+        )
+        if filter == "otters":
+            q = q.eq("has_otter", True)
+        elif filter == "empty":
+            q = q.eq("has_otter", False)
+        if user_id:
+            q = q.eq("user_id", user_id)
+        res = q.order("created_at", desc=True).range(lo, hi).execute()
+        items = []
+        for row in res.data:
+            img = row.pop("images")
+            img["label"] = _label_out(row)
+            items.append(img)
+        return {"items": items, "total": res.count or 0}
+
+    q = supabase.table("images").select(
+        f"id, filename, storage_path, is_labeled, created_at, labels({LABEL_FIELDS})", count="exact"
+    )
+    if filter == "unlabeled":
+        q = q.eq("is_labeled", False)
+    res = q.order("created_at", desc=True).order("filename").range(lo, hi).execute()
+    for img in res.data:
+        labels = img.pop("labels", None) or []
+        img["label"] = _label_out(labels[0]) if labels else None
+    return {"items": res.data, "total": res.count or 0}
+
+
+@router.get("/admin/overview")
+def get_overview(days: int = 14, _=Depends(require_admin)):
+    """Headline numbers plus labels-per-day (Pacific) for the activity chart."""
+    days = max(1, min(days, 90))
+    total = supabase.table("images").select("id", count="exact").limit(1).execute().count or 0
+    labeled = supabase.table("images").select("id", count="exact").eq("is_labeled", True).limit(1).execute().count or 0
+    with_otters = supabase.table("labels").select("id", count="exact").eq("has_otter", True).limit(1).execute().count or 0
+    vols = supabase.table("volunteer_totals").select("labels, active_ms, last_label_at").execute().data
+
+    today = datetime.now(PACIFIC).date()
+    start = today - timedelta(days=days - 1)
+    since = datetime.combine(start, datetime.min.time(), PACIFIC).isoformat()
+    per_day = {start + timedelta(days=i): 0 for i in range(days)}
+    rows, offset = [], 0
+    while True:  # page past PostgREST's 1000-row cap
+        chunk = (supabase.table("labels").select("created_at").gte("created_at", since)
+                 .range(offset, offset + 999).execute().data)
+        rows += chunk
+        if len(chunk) < 1000:
+            break
+        offset += 1000
+    for r in rows:
+        d = datetime.fromisoformat(r["created_at"]).astimezone(PACIFIC).date()
+        if d in per_day:
+            per_day[d] += 1
+
+    week_ago = datetime.now(PACIFIC) - timedelta(days=7)
+    return {
+        "total": total,
+        "labeled": labeled,
+        "unlabeled": total - labeled,
+        "with_otters": with_otters,
+        "percent_complete": round(labeled / total * 100, 1) if total else 0,
+        "volunteers": len(vols),
+        "active_7d": sum(1 for v in vols if v["last_label_at"] and datetime.fromisoformat(v["last_label_at"]) >= week_ago),
+        "hours": _hours(sum(v["active_ms"] or 0 for v in vols)),
+        "per_day": [{"date": d.isoformat(), "labels": n} for d, n in per_day.items()],
+    }
 
 
 @router.get("/admin/volunteers")

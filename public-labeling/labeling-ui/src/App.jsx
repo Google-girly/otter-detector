@@ -183,7 +183,7 @@ function Labeler() {
 
   const header = (
     <div className="header">
-      <h1>Otter Labeling</h1>
+      <div className="brand">🦦 Otter Labeling</div>
       <button className="me-pill" onClick={() => setShowProgress(true)} title="Your progress">
         <span>{me ? me.labels : "–"}</span> labeled
         {me && <> · <span>{me.hours}</span> hrs</>}
@@ -219,10 +219,10 @@ function Labeler() {
   return (
     <div className="app">
       {header}
-      <p className="instructions">
-        Drag a box around each otter, then <b>Submit</b>. No otters? Press <b>No Otters</b>.
+      <div className="instructions">
+        <p>Drag a box around <b>each otter</b>, then press <b>Submit</b>. Nothing there? Press <b>No otters</b>.</p>
         <span className="box-count"><span>{boxes.length}</span> {boxes.length === 1 ? "box" : "boxes"}</span>
-      </p>
+      </div>
 
       <div className="canvas-area" ref={areaRef}>
       {scale > 0 && (
@@ -280,22 +280,27 @@ function Labeler() {
 
 
       <div className="actions">
-        <button className="btn-submit" onClick={handleSubmit} disabled={boxes.length === 0 || submitting}>
-          Submit Labels
-        </button>
-        <button
-          className="btn-delete-selected"
-          onClick={() => { setBoxes((prev) => prev.filter((_, i) => i !== selectedBox)); setSelectedBox(null); }}
-          disabled={selectedBox === null}
-        >
-          Delete Selected
-        </button>
-        <button className="btn-clear" onClick={() => { setBoxes([]); setSelectedBox(null); }} disabled={boxes.length === 0}>
-          Clear All
-        </button>
-        <button className="btn-no-otters" onClick={handleNoOtters} disabled={submitting}>
-          No Otters
-        </button>
+        <div className="actions-edit">
+          <button
+            className="btn-ghost"
+            onClick={() => { setBoxes((prev) => prev.filter((_, i) => i !== selectedBox)); setSelectedBox(null); }}
+            disabled={selectedBox === null}
+            title="Tap a box to select it, then delete (or press Delete)"
+          >
+            Delete selected
+          </button>
+          <button className="btn-ghost" onClick={() => { setBoxes([]); setSelectedBox(null); }} disabled={boxes.length === 0}>
+            Clear all
+          </button>
+        </div>
+        <div className="actions-main">
+          <button className="btn-no-otters" onClick={handleNoOtters} disabled={submitting || boxes.length > 0}>
+            No otters
+          </button>
+          <button className="btn-submit" onClick={handleSubmit} disabled={boxes.length === 0 || submitting}>
+            {submitting ? "Saving…" : `Submit${boxes.length ? ` ${boxes.length}` : ""}`}
+          </button>
+        </div>
       </div>
       {error && <p className="inline-error">{error}</p>}
       {progress}
