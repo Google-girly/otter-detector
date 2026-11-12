@@ -184,10 +184,13 @@ function Labeler() {
   const header = (
     <div className="header">
       <div className="brand">🦦 Otter Labeling</div>
-      <button className="me-pill" onClick={() => setShowProgress(true)} title="Your progress">
-        <span>{me ? me.labels : "–"}</span> labeled
-        {me && <> · <span>{me.hours}</span> hrs</>}
-      </button>
+      <div className="header-right">
+        <button className="me-pill" onClick={() => setShowProgress(true)} title="Your progress">
+          <span>{me ? me.labels : "–"}</span> labeled
+          {me && <> · <span>{me.hours}</span> hrs</>}
+        </button>
+        <button className="btn-logout" onClick={() => supabase.auth.signOut()}>Log out</button>
+      </div>
     </div>
   );
 
