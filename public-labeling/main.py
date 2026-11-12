@@ -52,8 +52,13 @@ def require_user(credentials: HTTPAuthorizationCredentials = Depends(_bearer)):
     return res.user
 
 
-def _hours(active_ms) -> float:
-    return round((active_ms or 0) / 3_600_000, 2)
+# Service hours are earned by pictures labeled, not time on the site:
+# every 350 pictures counts as 1 hour (partial hours count, e.g. 175 = 0.5).
+PICTURES_PER_HOUR = 350
+
+
+def _hours(labels) -> float:
+    return round((labels or 0) / PICTURES_PER_HOUR, 2)
 
 
 def _public_name(full_name: str) -> str:
@@ -135,7 +140,7 @@ def get_me(user=Depends(require_user)):
         "labels": labels,
         "labels_today": today,
         "labels_with_otters": t.get("labels_with_otters") or 0,
-        "hours": _hours(t.get("active_ms")),
+        "hours": _hours(labels),
         "rank": rank,
         "first_label_at": t.get("first_label_at"),
         "last_label_at": t.get("last_label_at"),
@@ -255,7 +260,7 @@ def get_overview(days: int = 14, _=Depends(require_admin)):
     total = supabase.table("images").select("id", count="exact").limit(1).execute().count or 0
     labeled = supabase.table("images").select("id", count="exact").eq("is_labeled", True).limit(1).execute().count or 0
     with_otters = supabase.table("labels").select("id", count="exact").eq("has_otter", True).limit(1).execute().count or 0
-    vols = supabase.table("volunteer_totals").select("labels, active_ms, last_label_at").execute().data
+    vols = supabase.table("volunteer_totals").select("labels, last_label_at").execute().data
 
     today = datetime.now(PACIFIC).date()
     start = today - timedelta(days=days - 1)
@@ -283,7 +288,7 @@ def get_overview(days: int = 14, _=Depends(require_admin)):
         "percent_complete": round(labeled / total * 100, 1) if total else 0,
         "volunteers": len(vols),
         "active_7d": sum(1 for v in vols if v["last_label_at"] and datetime.fromisoformat(v["last_label_at"]) >= week_ago),
-        "hours": _hours(sum(v["active_ms"] or 0 for v in vols)),
+        "hours": round(sum(_hours(v["labels"]) for v in vols), 2),
         "per_day": [{"date": d.isoformat(), "labels": n} for d, n in per_day.items()],
     }
 
@@ -293,7 +298,8 @@ def get_volunteers(_=Depends(require_admin)):
     """Every volunteer with their totals — the source for community-service sign-off."""
     rows = supabase.table("volunteer_totals").select("*").order("labels", desc=True).execute().data
     for r in rows:
-        r["hours"] = _hours(r.pop("active_ms", 0))
+        r.pop("active_ms", None)
+        r["hours"] = _hours(r.get("labels"))
     return rows
 
 

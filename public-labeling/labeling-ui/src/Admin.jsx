@@ -566,7 +566,7 @@ function Volunteers({ rows, onOpen }) {
           </tbody>
         </table>
       </div>
-      <p className="muted footnote">Hours = time each image was on screen until submit, capped at 2 minutes per image.</p>
+      <p className="muted footnote">Hours = images labeled ÷ 350 (every 350 pictures counts as 1 hour; partial hours count).</p>
     </div>
   );
 }

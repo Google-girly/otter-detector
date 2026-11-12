@@ -37,7 +37,7 @@ export default function Progress({ me, onClose, onSignOut }) {
           <div className="my-stat"><div className="v">{me?.rank ? `#${me.rank}` : "–"}</div><div className="k">Rank</div></div>
         </div>
         <p className="hours-note">
-          Hours count the time each image is on screen until you submit, capped at 2 minutes per image.
+          Every 350 pictures you label counts as 1 hour of service (partial hours count).
           {since && ` Labeling since ${since}.`}
         </p>
 
