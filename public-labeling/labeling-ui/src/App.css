@@ -40,6 +40,14 @@
   font-weight: 600;
 }
 
+.canvas-area {
+  width: 100%;
+  max-width: 1200px;
+  display: flex;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
 .canvas-wrapper {
   border-radius: 10px;
   overflow: hidden;
@@ -313,4 +321,24 @@ button:disabled {
 
 .signout {
   margin-top: auto;
+}
+
+.actions {
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+@media (max-width: 600px) {
+  .app {
+    padding: 12px;
+  }
+
+  .actions {
+    width: 100%;
+  }
+
+  .actions button {
+    flex: 1 1 calc(50% - 10px);
+    padding: 12px 8px;
+  }
 }
