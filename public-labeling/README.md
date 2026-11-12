@@ -55,6 +55,52 @@ public-labeling/
 
 # Part 1 — Labeling
 
+## Volunteer accounts (new deployment)
+
+Labelers sign up with email + password (Supabase Auth). Every label is credited
+to the volunteer who made it, so they can see their own count, hours and rank,
+and the admin page has a **Volunteers** tab with a CSV export for signing off
+community-service hours.
+
+- **Hours** = time each image was on screen until submit, capped at 2 min per
+  image (so an idle tab doesn't count).
+- The **leaderboard** shows first name + last initial only; full names and
+  emails are visible to the admin only.
+- Images are claimed atomically on submit: if two people label the same frame,
+  only the first gets the credit (the second just gets the next image).
+- Admin corrections edit the boxes in place, so the volunteer keeps the credit.
+
+How it fits together: the browser uses the **publishable** key, for Auth only.
+It sends its access token to FastAPI, which verifies it with
+`supabase.auth.get_user()` and does all the table reads and writes with the
+**service** key. Every table has RLS on with no policies, so nobody can reach
+the data straight from the browser.
+
+**Setup on the new project (`rxdnubvmfomorzppjlxz`):**
+
+1. SQL Editor → run `db/volunteer_schema.sql` (images, profiles, labels,
+   the `volunteer_totals` view, and a signup trigger that creates profiles).
+2. Storage → create a public `frames` bucket and upload frames (see below).
+3. Authentication → URL Configuration → set **Site URL** to the deployed
+   domain, and add it under Redirect URLs (the confirmation and password-reset
+   links go there).
+4. Authentication → Email: the built-in mailer only sends a few emails per hour.
+   For a public signup, either set up custom SMTP (e.g. Resend, which is free
+   at low volume) or turn off **Confirm email**.
+5. `labeling-ui/.env`: copy `.env.example` and fill in `VITE_SUPABASE_URL` and
+   `VITE_SUPABASE_PUBLISHABLE_KEY`.
+6. New Vercel project, root directory `public-labeling`. Env vars:
+   `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `ADMIN_PASSWORD`,
+   `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`.
+
+| Route | Purpose |
+|---|---|
+| `GET /api/me` | Your totals: labels, today, hours, rank |
+| `GET /api/leaderboard` | Top 10 by labels |
+| `GET /api/admin/volunteers` | All volunteers with labels + hours (admin) |
+
+`/api/next-image` and `/api/submit-label` now require a signed-in user.
+
 ## Setup
 
 ### 1. Get frames

@@ -6,6 +6,8 @@ from dotenv import load_dotenv
 import os
 import random
 import secrets
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 # Load the .env file so we can use SUPABASE_URL and SUPABASE_KEY
 load_dotenv()
@@ -22,56 +24,134 @@ app.add_middleware(
     allow_headers=["*"],  # Allow any headers
 )
 
-# Connect to Supabase using our credentials from the .env file
-supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
+# Connect to Supabase. The backend is the only thing that touches the tables
+# (RLS is on with no policies), so it uses the service-role key. Never ship that
+# key to the browser — the frontend only gets the publishable key, for Auth.
+supabase = create_client(
+    os.getenv("SUPABASE_URL"),
+    os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_KEY"),
+)
 
 _bearer = HTTPBearer()
+PACIFIC = ZoneInfo("America/Los_Angeles")
 
 def require_admin(credentials: HTTPAuthorizationCredentials = Depends(_bearer)):
     password = os.getenv("ADMIN_PASSWORD", "")
     if not password or not secrets.compare_digest(credentials.credentials, password):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
+
+def require_user(credentials: HTTPAuthorizationCredentials = Depends(_bearer)):
+    """Verify a Supabase Auth access token (sent by the frontend) and return the user."""
+    try:
+        res = supabase.auth.get_user(credentials.credentials)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Please sign in again")
+    if not res or not res.user:
+        raise HTTPException(status_code=401, detail="Please sign in again")
+    return res.user
+
+
+def _hours(active_ms) -> float:
+    return round((active_ms or 0) / 3_600_000, 2)
+
+
+def _public_name(full_name: str) -> str:
+    """'Jane Q. Doe' -> 'Jane D.' so the public leaderboard doesn't show full names."""
+    parts = (full_name or "").split()
+    if not parts:
+        return "Volunteer"
+    return parts[0] if len(parts) == 1 else f"{parts[0]} {parts[-1][0]}."
+
 # All routes live under /api so they don't conflict with the frontend on Vercel
 router = APIRouter(prefix="/api")
 
-# This is an endpoint — when the frontend calls /api/next-image
-# it gets back the next image that hasn't been labeled yet
+# A random unlabeled image, picked from a batch of 50 so concurrent volunteers
+# rarely get the same one.
 @router.get("/next-image")
-def get_next_image():
-    # Look in the images table for any row where is_labeled is False
-    # Only grab 1 at a time
+def get_next_image(user=Depends(require_user)):
     response = supabase.table("images").select("*").eq("is_labeled", False).limit(50).execute()
-
-    # If nothing comes back, all images have been labeled
     if not response.data:
         return {"message": "All images labeled!"}
-
     return random.choice(response.data)
 
-# This endpoint receives the bounding boxes the user drew
-# and saves them to the database
-@router.post("/submit-label")
-def submit_label(payload: dict):
-    # Pull out the pieces of info the frontend sends us
-    image_id = payload["image_id"]    # Which image was labeled
-    boxes = payload["boxes"]          # The bounding box coordinates and labels
-    labeled_by = payload["labeled_by"] # Who labeled it (their email)
-    has_otter = len(boxes) > 0        # True if any boxes were drawn
 
-    # Save the label data to the labels table
+# Save the boxes a volunteer drew and credit them for it.
+@router.post("/submit-label")
+def submit_label(payload: dict, user=Depends(require_user)):
+    image_id = payload["image_id"]
+    boxes = payload.get("boxes") or []
+    duration_ms = payload.get("duration_ms")
+    duration_ms = max(0, int(duration_ms)) if isinstance(duration_ms, (int, float)) else None
+
+    # Claim the image atomically: only flips if nobody labeled it first. This is
+    # what stops two volunteers (or one volunteer re-submitting) from both
+    # getting credit for the same frame.
+    claimed = (
+        supabase.table("images").update({"is_labeled": True})
+        .eq("id", image_id).eq("is_labeled", False).execute()
+    )
+    if not claimed.data:
+        raise HTTPException(status_code=409, detail="Someone else already labeled this image")
+
     supabase.table("labels").insert({
         "image_id": image_id,
+        "user_id": user.id,
+        "labeled_by": user.email,
         "boxes": boxes,
-        "labeled_by": labeled_by,
-        "has_otter": has_otter,
+        "has_otter": len(boxes) > 0,
+        "duration_ms": duration_ms,
     }).execute()
-
-    # Mark the image as labeled in the images table so it won't show up again
-    supabase.table("images").update({"is_labeled": True}).eq("id", image_id).execute()
-
-    # Send a confirmation back to the frontend
     return {"message": "Label saved!"}
+
+
+@router.get("/me")
+def get_me(user=Depends(require_user)):
+    """The signed-in volunteer's profile and running totals."""
+    profile = supabase.table("profiles").select("*").eq("id", user.id).limit(1).execute().data
+    totals = supabase.table("volunteer_totals").select("*").eq("user_id", user.id).limit(1).execute().data
+    t = totals[0] if totals else {}
+
+    start_of_day = datetime.now(PACIFIC).replace(hour=0, minute=0, second=0, microsecond=0)
+    today = (
+        supabase.table("labels").select("id", count="exact")
+        .eq("user_id", user.id).gte("created_at", start_of_day.isoformat()).execute().count
+    ) or 0
+
+    labels = t.get("labels") or 0
+    rank = None
+    if labels:
+        ahead = (
+            supabase.table("volunteer_totals").select("user_id", count="exact")
+            .gt("labels", labels).execute().count
+        ) or 0
+        rank = ahead + 1
+
+    p = profile[0] if profile else {}
+    return {
+        "full_name": p.get("full_name") or user.email,
+        "email": user.email,
+        "organization": p.get("organization"),
+        "labels": labels,
+        "labels_today": today,
+        "labels_with_otters": t.get("labels_with_otters") or 0,
+        "hours": _hours(t.get("active_ms")),
+        "rank": rank,
+        "first_label_at": t.get("first_label_at"),
+        "last_label_at": t.get("last_label_at"),
+    }
+
+
+@router.get("/leaderboard")
+def leaderboard(user=Depends(require_user)):
+    rows = (
+        supabase.table("volunteer_totals").select("user_id, full_name, labels")
+        .gt("labels", 0).order("labels", desc=True).limit(10).execute().data
+    )
+    return [
+        {"rank": i + 1, "name": _public_name(r["full_name"]), "labels": r["labels"], "is_me": r["user_id"] == user.id}
+        for i, r in enumerate(rows)
+    ]
 
 
 @router.post("/admin/login")
@@ -97,13 +177,18 @@ def get_stats(_=Depends(require_admin)):
 @router.put("/admin/images/{image_id}")
 def update_label(image_id: str, payload: dict, _=Depends(require_admin)):
     boxes = payload["boxes"]
-    supabase.table("labels").delete().eq("image_id", image_id).execute()
-    supabase.table("labels").insert({
-        "image_id": image_id,
-        "boxes": boxes,
-        "labeled_by": "admin",
-        "has_otter": len(boxes) > 0,
-    }).execute()
+    # Correct the boxes in place so the volunteer who labeled it keeps the credit.
+    updated = (
+        supabase.table("labels").update({"boxes": boxes, "has_otter": len(boxes) > 0})
+        .eq("image_id", image_id).execute()
+    )
+    if not updated.data:
+        supabase.table("labels").insert({
+            "image_id": image_id,
+            "boxes": boxes,
+            "labeled_by": "admin",
+            "has_otter": len(boxes) > 0,
+        }).execute()
     supabase.table("images").update({"is_labeled": True}).eq("id", image_id).execute()
     return {"message": "Label updated!"}
 
@@ -112,6 +197,15 @@ def update_label(image_id: str, payload: dict, _=Depends(require_admin)):
 def get_images(_=Depends(require_admin)):
     response = supabase.table("images").select("id, filename, storage_path, is_labeled, created_at, labels(boxes)").order("created_at", desc=True).execute()
     return response.data
+
+
+@router.get("/admin/volunteers")
+def get_volunteers(_=Depends(require_admin)):
+    """Every volunteer with their totals — the source for community-service sign-off."""
+    rows = supabase.table("volunteer_totals").select("*").order("labels", desc=True).execute().data
+    for r in rows:
+        r["hours"] = _hours(r.pop("active_ms", 0))
+    return rows
 
 
 # ── Model evaluation (see db/eval_schema.sql + review.html) ──────────────────────

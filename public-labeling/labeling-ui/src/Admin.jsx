@@ -1,10 +1,10 @@
 import { useEffect, useState, useCallback } from "react";
 import { Stage, Layer, Image as KonvaImage, Rect } from "react-konva";
 import axios from "axios";
+import { frameUrl } from "./supabase";
 import "./Admin.css";
 
 const BACKEND = "";
-const SUPABASE_URL = "https://ofuqvgfdninllnlhtqij.supabase.co";
 
 const TOKEN_KEY = "admin_token";
 
@@ -57,7 +57,7 @@ function LoginScreen({ onLogin }) {
 }
 
 function imageUrl(storage_path) {
-  return `${SUPABASE_URL}/storage/v1/object/public/frames/${storage_path}`;
+  return frameUrl(storage_path);
 }
 
 // ─── Edit Modal ────────────────────────────────────────────────────────────────
@@ -208,6 +208,75 @@ function EditModal({ images, startIndex, onClose, onSaved }) {
   );
 }
 
+// ─── Volunteers (community-service hours) ──────────────────────────────────────
+
+const fmtDate = (d) => (d ? new Date(d).toLocaleDateString() : "");
+
+function downloadCsv(rows) {
+  const cols = [
+    ["full_name", "Name"], ["email", "Email"], ["organization", "Organization"],
+    ["labels", "Images labeled"], ["hours", "Hours"],
+    ["first_label_at", "First label"], ["last_label_at", "Last label"], ["joined_at", "Joined"],
+  ];
+  const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const lines = [cols.map(([, h]) => esc(h)).join(",")];
+  for (const r of rows) {
+    lines.push(cols.map(([k]) => esc(k.endsWith("_at") ? fmtDate(r[k]) : r[k])).join(","));
+  }
+  const blob = new Blob([lines.join("\n")], { type: "text/csv" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `otter-volunteer-hours-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function Volunteers() {
+  const [rows, setRows] = useState(null);
+  const [q, setQ] = useState("");
+
+  useEffect(() => {
+    axios.get(`${BACKEND}/api/admin/volunteers`, { headers: authHeaders() }).then((r) => setRows(r.data));
+  }, []);
+
+  if (!rows) return <p className="vol-muted">Loading volunteers…</p>;
+
+  const needle = q.trim().toLowerCase();
+  const shown = needle
+    ? rows.filter((r) => [r.full_name, r.email, r.organization].some((v) => v?.toLowerCase().includes(needle)))
+    : rows;
+
+  return (
+    <div>
+      <div className="filter-row">
+        <input className="vol-search" placeholder="Search name, email, organization" value={q} onChange={(e) => setQ(e.target.value)} />
+        <span className="filter-count">{shown.length} volunteers</span>
+        <button className="filter-btn" onClick={() => downloadCsv(shown)} disabled={!shown.length}>Download CSV</button>
+      </div>
+      <div className="vol-table-wrap">
+        <table className="vol-table">
+          <thead>
+            <tr><th>Name</th><th>Email</th><th>Organization</th><th className="num">Labeled</th><th className="num">Hours</th><th>First</th><th>Last</th></tr>
+          </thead>
+          <tbody>
+            {shown.map((r) => (
+              <tr key={r.user_id}>
+                <td>{r.full_name}</td>
+                <td>{r.email}</td>
+                <td>{r.organization}</td>
+                <td className="num">{r.labels}</td>
+                <td className="num">{r.hours}</td>
+                <td>{fmtDate(r.first_label_at)}</td>
+                <td>{fmtDate(r.last_label_at)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ─── Admin Page ────────────────────────────────────────────────────────────────
 
 export default function Admin() {
@@ -216,6 +285,7 @@ export default function Admin() {
   const [images, setImages] = useState([]);
   const [filter, setFilter] = useState("all");
   const [editIndex, setEditIndex] = useState(null);
+  const [tab, setTab] = useState("images");
 
   const fetchData = () => {
     const h = { headers: authHeaders() };
@@ -296,6 +366,13 @@ export default function Admin() {
         </div>
       )}
 
+      <div className="filter-row tab-row">
+        {[["images", "Images"], ["volunteers", "Volunteers"]].map(([k, label]) => (
+          <button key={k} className={`filter-btn ${tab === k ? "active" : ""}`} onClick={() => setTab(k)}>{label}</button>
+        ))}
+      </div>
+
+      {tab === "volunteers" ? <Volunteers /> : <>
       <div className="filter-row">
         {["all", "labeled", "unlabeled"].map((f) => (
           <button key={f} className={`filter-btn ${filter === f ? "active" : ""}`} onClick={() => setFilter(f)}>
@@ -320,6 +397,8 @@ export default function Admin() {
           );
         })}
       </div>
+
+      </>}
 
       {editIndex !== null && (
         <EditModal

@@ -394,3 +394,63 @@
   border-color: #f87171;
   color: #f87171;
 }
+
+/* Volunteers tab */
+
+.tab-row {
+  margin-bottom: 16px;
+}
+
+.vol-search {
+  font: inherit;
+  font-size: 14px;
+  padding: 7px 12px;
+  border-radius: 7px;
+  border: 1px solid #2e3448;
+  background: #1e2330;
+  color: #e2e8f0;
+  min-width: 0;
+  flex: 1;
+  max-width: 320px;
+}
+
+.vol-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #2e3448;
+  border-radius: 10px;
+}
+
+.vol-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.vol-table th,
+.vol-table td {
+  padding: 9px 12px;
+  text-align: left;
+  border-bottom: 1px solid #2e3448;
+  white-space: nowrap;
+}
+
+.vol-table th {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: #64748b;
+  background: #1e2330;
+}
+
+.vol-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.vol-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.vol-muted {
+  color: #64748b;
+}
