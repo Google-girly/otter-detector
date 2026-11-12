@@ -28,7 +28,6 @@ export default function App() {
 function Labeler() {
   const [image, setImage] = useState(null);
   const [konvaImage, setKonvaImage] = useState(null);
-  const [scale, setScale] = useState(1);
   const [boxes, setBoxes] = useState([]);
   const [drawing, setDrawing] = useState(false);
   const [currentBox, setCurrentBox] = useState(null);
@@ -39,6 +38,8 @@ function Labeler() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const shownAt = useRef(0); // when the current image appeared, for hours tracking
+  const areaRef = useRef(null); // the box the image has to fit in
+  const [viewport, setViewport] = useState({ w: 0, h: 0 });
 
   const refreshMe = () => api.get("/api/me").then((r) => setMe(r.data)).catch(() => {});
 
@@ -63,9 +64,6 @@ function Labeler() {
     const img = new window.Image();
     img.src = frameUrl(res.data.storage_path);
     img.onload = () => {
-      const maxW = window.innerWidth - 40;
-      const maxH = window.innerHeight - 200;
-      setScale(Math.min(maxW / img.width, maxH / img.height, 1));
       setKonvaImage(img);
       shownAt.current = Date.now();
     };
@@ -75,6 +73,31 @@ function Labeler() {
     fetchNextImage();
     refreshMe();
   }, []);
+
+  // Re-fit the image whenever the window resizes or the phone rotates.
+  useEffect(() => {
+    const el = areaRef.current;
+    if (!el) return;
+    const update = () => setViewport({ w: el.clientWidth, h: window.innerHeight });
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    window.addEventListener("resize", update);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", update);
+    };
+  }, [konvaImage]);
+
+  // Fill the available width, but leave room below for the buttons. Boxes are
+  // stored in original-image pixels, so changing the scale never moves them.
+  const RESERVED_H = viewport.w < 600 ? 260 : 220; // header + instructions + buttons
+  const scale = konvaImage && viewport.w
+    ? Math.min(
+        viewport.w / konvaImage.width,
+        Math.max(viewport.h - RESERVED_H, 180) / konvaImage.height,
+      )
+    : 0;
 
   // Delete selected box with keyboard
   useEffect(() => {
@@ -201,6 +224,8 @@ function Labeler() {
         <span className="box-count"><span>{boxes.length}</span> {boxes.length === 1 ? "box" : "boxes"}</span>
       </p>
 
+      <div className="canvas-area" ref={areaRef}>
+      {scale > 0 && (
       <div className="canvas-wrapper">
         <Stage
           width={stageW}
@@ -249,6 +274,8 @@ function Labeler() {
             )}
           </Layer>
         </Stage>
+      </div>
+      )}
       </div>
 
 
